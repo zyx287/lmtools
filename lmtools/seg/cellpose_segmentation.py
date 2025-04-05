@@ -1,7 +1,7 @@
 '''
 author: zyx
 date: 2025-04-04
-last_modified: 2025-04-04
+last_modified: 2025-04-05
 description: 
     CellPose segmentation pipeline for light microscopy images
 '''

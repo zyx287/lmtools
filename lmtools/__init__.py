@@ -11,6 +11,7 @@ from lmtools.seg import (
     maskExtract,
     analyze_segmentation,
     summarize_segmentation,
+    get_bounding_boxes,
     run_pipeline
 )
 
@@ -20,5 +21,6 @@ __all__ = [
     'maskExtract',
     'analyze_segmentation',
     'summarize_segmentation',
+    'get_bounding_boxes',
     'run_pipeline',
 ]
