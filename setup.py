@@ -12,7 +12,14 @@ if __name__ == "__main__":
             "napari",
             "opencv-python",
             "pillow",
+            "scipy",
+            "pandas",
+            "pyyaml",
         ],
+        extras_require={
+            "cellpose": ["cellpose", "torch"],
+            "dev": ["flake8", "pytest", "mypy"],
+        },
         entry_points={
             'console_scripts': [
                 'lmtools=lmtools.__main__:main',

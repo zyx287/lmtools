@@ -1,0 +1,46 @@
+# Example CellPose Segmentation Configuration
+
+# Model Configuration
+model:
+  # Path to custom model (comment out to use a pre-trained model)
+  path: "/path/to/your/custom/model"
+  # Alternative: use a built-in pretrained model (cyto, nuclei, etc.)
+  # pretrained_model: "cyto"
+  
+# Input Configuration
+input:
+  # List of directories to process
+  directories:
+    - "/path/to/first/directory"
+    - "/path/to/second/directory"
+    - "/path/to/third/directory"
+
+# Segmentation Parameters
+segmentation_params:
+  # Channels to use: [channel_to_segment, optional_nuclear_channel]
+  # For grayscale/single channel, use [0, 0]
+  # For RGB, typically use [1, 0] for green channel
+  channels: [1, 0]
+  
+  # Optional: Override model's default diameter (in pixels)
+  # diameter: 30.0
+  
+  # Cellpose flow threshold (0-1, lower is more sensitive)
+  flow_threshold: 0.4
+  
+  # Cellpose cell probability threshold (0-1, lower is more sensitive) 
+  cellprob_threshold: 0.0
+
+# Output Configuration
+output:
+  # Skip files containing this pattern
+  exclude_pattern: "_masks"
+  
+  # Suffix to add to output files
+  suffix: "_masks"
+  
+  # Clear GPU memory after processing each image
+  clear_cache: true
+
+# Force GPU usage even if initialization check fails
+force_gpu: false
