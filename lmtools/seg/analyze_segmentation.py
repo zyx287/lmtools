@@ -51,7 +51,7 @@ def analyze_segmentation(
             raise FileNotFoundError(f"Mask file not found: {mask}")
         
         try:
-            mask_data = np.load(mask)
+            mask_data = np.load(mask, allow_pickle=True)
         except Exception as e:
             raise ValueError(f"Error loading mask file: {e}")
     else:
