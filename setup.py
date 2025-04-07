@@ -4,7 +4,7 @@ if __name__ == "__main__":
     setup(
         name="lmtools",
         version="0.0.1",
-        packages=find_packages(),
+        packages=find_packages(),  # No 'where' parameter needed
         install_requires=[
             "numpy",
             "zarr==2.18.2",
