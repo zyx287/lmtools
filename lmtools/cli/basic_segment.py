@@ -21,7 +21,7 @@ def add_arguments(parser):
     threshold_parser = subparsers.add_parser("threshold", help="Threshold-based segmentation")
     threshold_parser.add_argument("input", type=str, help="Input image path")
     threshold_parser.add_argument("output", type=str, help="Output segmentation path")
-    threshold_parser.add_argument("--method", type=str, default="otsu",
+    threshold_parser.add_argument("--threshold-method", type=str, default="otsu",
                                 choices=["simple", "otsu", "adaptive", "local", "yen", "li", "triangle"],
                                 help="Thresholding method")
     threshold_parser.add_argument("--threshold", type=float, help="Manual threshold value (0-1)")
@@ -103,7 +103,7 @@ def main(args):
         threshold_segment(
             args.input,
             args.output,
-            method=args.method,
+            method=args.threshold_method,  # FIXED: use threshold_method instead of method
             threshold_value=args.threshold,
             block_size=args.block_size,
             offset=args.offset,
