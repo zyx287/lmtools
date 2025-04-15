@@ -2,7 +2,7 @@
 LMTools - Tools and scripts for processing and visualizing light microscopy data.
 """
 
-__version__ = "0.0.1" # Updating to 0.0.2
+__version__ = "0.0.1"
 
 # Import main functionality for easier access
 from lmtools.io import load_nd2, downsample_image, batch_downsample
@@ -12,7 +12,10 @@ from lmtools.seg import (
     analyze_segmentation,
     summarize_segmentation,
     get_bounding_boxes,
-    run_pipeline
+    run_pipeline,
+    threshold_segment,
+    watershed_segment,
+    region_growing_segment
 )
 
 __all__ = [
@@ -25,4 +28,7 @@ __all__ = [
     'summarize_segmentation',
     'get_bounding_boxes',
     'run_pipeline',
+    'threshold_segment',
+    'watershed_segment',
+    'region_growing_segment',
 ]

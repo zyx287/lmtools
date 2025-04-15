@@ -51,6 +51,56 @@ viewer.screenshot("screenshot.png")
 lmtools load_nd2 path/to/microscopy_image.nd2
 ```
 
+### Image down-sampling
+
+#### As a package
+```python
+from lmtools import downsample_image, batch_downsample
+
+# Downsample a single image to 50% size using bicubic interpolation
+downsampled = downsample_image(
+    "input.tif", 
+    "output.tif",
+    scale_factor=0.5,
+    method="bicubic"
+)
+
+# Downsample all TIFF images in a directory
+# Using Lanczos algorithm for highest quality
+batch_downsample(
+    "input_directory",
+    "output_directory",
+    scale_factor=0.25,  # Reduce to 25% of original size
+    method="lanczos",
+    recursive=True      # Process subdirectories too
+)
+
+# Advanced use: Different scale factors for each dimension
+# This creates a non-uniform scaling
+downsampled = downsample_image(
+    "input.tif",
+    "output.tif",
+    scale_factor=(0.5, 0.75),  # Scale height by 0.5, width by 0.75
+    method="gaussian",         # Use Gaussian pre-filtering for smoother results
+    library="skimage"          # Force use of scikit-image
+)
+```
+
+#### Command line
+```bash
+# Basic usage - downsample a single image with default settings (50% size, bicubic)
+lmtools downsample input.tif output.tif
+
+# Batch process a directory using lanczos algorithm
+lmtools downsample input_directory/ output_directory/ --method lanczos --recursive
+
+# Significant downsampling using area method (better for small output sizes)
+lmtools downsample input.tif output.tif --scale 0.1 --method area --library opencv
+
+# Enable verbose logging for troubleshooting
+lmtools downsample input.tif output.tif --verbose
+```
+
 ### Generating Segmentation Masks from QuPath
 
 #### As a Python package
@@ -188,6 +238,56 @@ lmtools cellpose_segment cellpose_config.yaml
 
 # Enable verbose logging
 lmtools cellpose_segment cellpose_config.yaml --verbose
+```
+
+### Basic segmentation
+
+#### As a package
+```python
+from lmtools import threshold_segment, watershed_segment, region_growing_segment
+
+# Simple thresholding with Otsu's method
+labels = threshold_segment(
+    "input.tif",
+    "output.tif",
+    method="otsu",
+    fill_holes=True,
+    remove_small_objects=True,
+    min_size=50
+)
+
+# Watershed segmentation for touching objects
+labels = watershed_segment(
+    "input.tif",
+    "output.tif",
+    threshold_method="otsu",
+    distance_transform=True,
+    min_distance=10
+)
+
+# Region growing for complex textures
+labels = region_growing_segment(
+    "input.tif",
+    "output.tif",
+    seed_method="intensity",
+    num_seeds=100,
+    threshold_method="otsu"
+)
+```
+
+#### Command line
+```bash
+# Threshold segmentation using Otsu's method
+lmtools basic_segment threshold input.tif output.tif --method otsu --min-size 50
+
+# Adaptive thresholding for uneven illumination
+lmtools basic_segment threshold input.tif output.tif --method adaptive --block-size 51
+
+# Watershed segmentation for separating touching objects
+lmtools basic_segment watershed input.tif output.tif --min-distance 15
+
+# Region growing with SLIC superpixels
+lmtools basic_segment region input.tif output.tif --num-seeds 200 --compactness 0.05
 ```
 
 ## Configuration Files
