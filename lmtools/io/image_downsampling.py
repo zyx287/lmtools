@@ -4,6 +4,7 @@ date: 2025-04-14
 last_modified: 2025-04-14
 description: 
     Functions for downsampling microscopy images with different algorithms
+    For large volume data/parallel processing, consider using Igneous from Seung Lab
 '''
 import os
 import numpy as np

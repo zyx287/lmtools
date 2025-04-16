@@ -15,7 +15,9 @@ from lmtools.seg import (
     run_pipeline,
     threshold_segment,
     watershed_segment,
-    region_growing_segment
+    region_growing_segment,
+    intensity_filter,
+    visualize_intensity_regions
 )
 
 __all__ = [
@@ -31,4 +33,6 @@ __all__ = [
     'threshold_segment',
     'watershed_segment',
     'region_growing_segment',
+    'intensity_filter',
+    'visualize_intensity_regions',
 ]

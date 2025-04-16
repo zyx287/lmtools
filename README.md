@@ -289,6 +289,56 @@ lmtools basic_segment watershed input.tif output.tif --min-distance 15
 # Region growing with SLIC superpixels
 lmtools basic_segment region input.tif output.tif --num-seeds 200 --compactness 0.05
 ```
+### Intensity filter
+#### Package usage
+```python
+from lmtools import intensity_filter, visualize_intensity_regions
+
+# Basic filtering - remove low-intensity objects
+filtered_mask = intensity_filter(
+    "segmentation.tif",                # Segmentation mask with labeled objects
+    "intensity_image.tif",             # Corresponding intensity image
+    "filtered_segmentation.tif",       # Output path
+    threshold_method='otsu',           # Automatic threshold using Otsu's method
+    plot_histogram=True                # Show histogram of intensities
+)
+
+# Membrane analysis - focus on cell borders
+filtered_mask = intensity_filter(
+    "segmentation.tif",
+    "intensity_image.tif",
+    "membrane_filtered.tif",
+    region_type='membrane',            # Only consider membrane/border regions
+    membrane_width=3,                  # 3-pixel membrane width
+    threshold=0.25                     # Manual threshold (0-1 scale)
+)
+
+# Visualize the different regions for quality control
+visualization = visualize_intensity_regions(
+    "segmentation.tif",
+    "intensity_image.tif",
+    "region_visualization.png",
+    label_id=5                         # Visualize regions for object #5
+)
+```
+
+#### Command line
+```bash
+# Basic filtering with automatic threshold
+lmtools intensity_filter segmentation.tif intensity_image.tif filtered.tif
+
+# Analyze only membrane regions (3px wide) with manual threshold
+lmtools intensity_filter segmentation.tif intensity_image.tif membrane_filtered.tif \
+    --region membrane --membrane-width 3 --threshold 0.25
+
+# Use percentile-based thresholding (remove bottom 30%)
+lmtools intensity_filter segmentation.tif intensity_image.tif filtered.tif \
+    --threshold-method percentile --percentile 30
+
+# Visualize the analyzed regions
+lmtools intensity_filter segmentation.tif intensity_image.tif filtered.tif \
+    --visualize-regions --vis-output regions.png
+```
 
 ## Configuration Files
 
