@@ -5,7 +5,15 @@ LMTools - Tools and scripts for processing and visualizing light microscopy data
 __version__ = "0.0.1"
 
 # Import main functionality for easier access
-from lmtools.io import load_nd2, downsample_image, batch_downsample, split_channels, batch_split_channels
+from lmtools.io import (
+    load_nd2, 
+    downsample_image, 
+    batch_downsample, 
+    split_channels, 
+    batch_split_channels,
+    transform_and_split,
+    batch_transform_and_split
+)
 from lmtools.seg import (
     generate_segmentation_mask, 
     maskExtract,
@@ -26,6 +34,8 @@ __all__ = [
     'batch_downsample',
     'split_channels',
     'batch_split_channels',
+    'transform_and_split',
+    'batch_transform_and_split',
     'generate_segmentation_mask',
     'maskExtract',
     'analyze_segmentation',
