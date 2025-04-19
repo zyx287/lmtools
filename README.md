@@ -100,7 +100,38 @@ lmtools downsample input.tif output.tif --scale 0.1 --method area --library open
 # Enable verbose logging for troubleshooting
 lmtools downsample input.tif output.tif --verbose
 ```
+### Channel splitting
+#### Package
+```python
+from lmtools import split_channels
 
+# Split a multi-channel image using custom names
+output_files = split_channels(
+    "microscopy_image.tif",
+    channel_names=["R", "G", "CY5"]
+)
+
+# Process all images in a directory
+from lmtools import batch_split_channels
+
+batch_split_channels(
+    "input_directory",
+    output_dir="output_directory",
+    channel_names=["DAPI", "GFP", "mCherry"],
+    recursive=True
+)
+```
+#### CLI
+```bash
+# Basic usage - split a single image with default channel names
+lmtools split_channels multi_channel_image.tif
+
+# Specify output directory and custom channel names
+lmtools split_channels multi_channel_image.tif --output ./channels/ --sequence R G CY5
+
+# Batch process with recursive search
+lmtools split_channels ./data/ --recursive --sequence R G CY5 --verbose
+```
 ### Generating Segmentation Masks from QuPath
 
 #### As a Python package
