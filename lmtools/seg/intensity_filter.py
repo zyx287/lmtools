@@ -7,14 +7,17 @@ description:
 '''
 import os
 import numpy as np
+import pandas as pd
+
 from typing import Union, Tuple, Optional, Dict, Any, List, Literal
 from pathlib import Path
 import logging
+
 import tifffile
 import matplotlib.pyplot as plt
 from scipy import ndimage
 from skimage import measure, morphology, segmentation
-import pandas as pd
+from scipy.ndimage import find_objects
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -76,7 +79,10 @@ def intensity_filter(
         if not seg_path.exists():
             raise FileNotFoundError(f"Segmentation file not found: {seg_path}")
         try:
-            seg_data = tifffile.imread(seg_path)
+            if seg_path.suffix.lower() in ['.tif', '.tiff']:
+                seg_data = tifffile.imread(seg_path)
+            else:
+                seg_data = np.load(seg_path, allow_pickle=True)
             logger.info(f"Loaded segmentation from {seg_path}")
         except Exception as e:
             logger.error(f"Error loading segmentation: {e}")
@@ -120,57 +126,34 @@ def intensity_filter(
     labels = np.unique(seg_data)
     labels = labels[labels > 0]
     
-    # Create region masks based on region_type
-    region_masks = {}
-    
-    for label in labels:
-        # Create binary mask for this object
-        obj_mask = (seg_data == label)
-        
-        if region_type == 'whole':
-            # Use the whole object
-            region_masks[label] = obj_mask
-            
-        elif region_type == 'membrane':
-            # Create a membrane/border region
-            eroded = morphology.erosion(obj_mask, morphology.disk(membrane_width))
-            membrane = obj_mask & ~eroded
-            region_masks[label] = membrane
-            
-        elif region_type == 'inner':
-            # Create an inner region
-            eroded = morphology.erosion(obj_mask, morphology.disk(membrane_width))
-            region_masks[label] = eroded
-            
-        elif region_type == 'outer':
-            # Create an outer region including the object and its boundary
-            dilated = morphology.dilation(obj_mask, morphology.disk(membrane_width))
-            outer = dilated & ~obj_mask
-            region_masks[label] = outer
-        
-        else:
-            raise ValueError(f"Unknown region type: {region_type}")
-    
-    # Calculate mean intensity for each object
+    objects = find_objects(seg_data > 0) # for segmentation produced by cellpose, the label starts from 1
+
     measurements = {}
     
-    for label in labels:
-        mask = region_masks[label]
-        pixels = intensity_float[mask]
-        
-        if len(pixels) == 0:
-            mean_intensity = 0
+    for i, slices in enumerate(objects):
+        region_mask = seg_data[slices] == labels[i]
+        if region_type == 'whole':
+            average_intensity = np.mean(intensity_float[slices][region_mask])
+        elif region_type == "membrane":
+            eroded = morphology.erosion(region_mask, morphology.disk(membrane_width))
+            membrane = region_mask & ~eroded
+            average_intensity = np.mean(intensity_float[slices][membrane])
+        elif region_type == 'inner':
+            eroded = morphology.erosion(region_mask, morphology.disk(membrane_width))
+            average_intensity = np.mean(intensity_float[slices][eroded])
+        elif region_type == 'outer':
+            dilated = morphology.dilation(region_mask, morphology.disk(membrane_width))
+            outer = dilated & ~region_mask
+            average_intensity = np.mean(intensity_float[slices][outer])
         else:
-            mean_intensity = np.mean(pixels)
-        
-        measurements[label] = {
-            'label': int(label),
-            'mean_intensity': float(mean_intensity),
-            'area': int(np.sum(mask)),
+            raise ValueError(f"Unknown region type: {region_type}")
+        measurements[labels[i]] = {
+            'label': int(labels[i]),
+            'mean_intensity': float(average_intensity),
+            'area': int(np.sum(region_mask)),
             'region_type': region_type
         }
     
-    # Create DataFrame from measurements
     df = pd.DataFrame.from_dict(measurements, orient='index')
     
     # Determine threshold if not provided
@@ -196,17 +179,14 @@ def intensity_filter(
     
     # Apply threshold to filter objects
     filtered_labels = df[df['mean_intensity'] >= threshold]['label'].values
-    filtered_mask = np.zeros_like(seg_data)
+    filtered_mask = np.where(np.isin(seg_data, filtered_labels), seg_data, 0)
     
-    for label in filtered_labels:
-        filtered_mask[seg_data == label] = label
-    
-    logger.info(f"Filtered from {len(labels)} to {len(filtered_labels)} objects (threshold: {threshold})")
+    logger.info(f"Filtered from {len(labels)} to {len(filtered_labels)} objects (threshold: {threshold}, by {threshold_method} and {region_type})")
     
     # Plot histogram if requested
     if plot_histogram:
         plt.figure(figsize=(10, 6))
-        plt.hist(df['mean_intensity'].values, bins=30, alpha=0.7)
+        plt.hist(df['mean_intensity'].values, bins=50, alpha=0.7)
         plt.axvline(x=threshold, color='r', linestyle='--', 
                     label=f'Threshold: {threshold:.4f}')
         plt.xlabel('Mean Intensity')
