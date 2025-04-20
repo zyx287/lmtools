@@ -134,6 +134,30 @@ lmtools split_channels ./data/ --recursive --sequence R G CY5 --verbose
 ```
 ### Generating Segmentation Masks from QuPath
 
+### If the image data required transform use:
+####
+```python
+from lmtools import transform_and_split
+
+# Specify that channel axis is 0 (first dimension)
+output_files = transform_and_split(
+    "your_image.tif",
+    channel_axis=0,
+    channel_names=["Channel1", "Channel2"]
+)
+```
+####
+```bash
+lmtools transform_and_split your_image.tif --channel-axis 0 --sequence Channel1 Channel2
+# Transpose from (C, Z, Y, X) to (C, X, Y, Z)
+lmtools transform_and_split image.tif --transpose 0 3 2 1
+# Normalization: Optionally normalize each channel's intensity to the 0-1 range
+lmtools transform_and_split image.tif --normalize
+# Batch Processing: Process multiple files with the same setting
+lmtools transform_and_split input_directory/ --output output_directory/ --channel-axis 0 --sequence Ch1 Ch2 --recursive
+```
+
+
 #### As a Python package
 
 ```python
