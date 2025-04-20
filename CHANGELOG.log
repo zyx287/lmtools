@@ -2,4 +2,5 @@ Before 2025-04-14 0.0.1
 
 Add
 1. downsampling in io functions and the corresponding CLI [Committed and pushed]
-2. basic segmentation functions for easy image [ongoing]
+2. basic segmentation functions for easy image [Initial commit pushed, optimization ongoing]
+3. intensity filtering, splitting, transforming and slices based segmentation processing [Committed and pushed]
