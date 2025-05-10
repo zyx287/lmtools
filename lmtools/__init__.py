@@ -25,7 +25,10 @@ from lmtools.seg import (
     watershed_segment,
     region_growing_segment,
     intensity_filter,
-    visualize_intensity_regions
+    visualize_intensity_regions,
+    overlap_filter,
+    intensity_channel_filter,
+    multi_channel_filter
 )
 
 __all__ = [
@@ -47,4 +50,7 @@ __all__ = [
     'region_growing_segment',
     'intensity_filter',
     'visualize_intensity_regions',
+    'overlap_filter',
+    'intensity_channel_filter',
+    'multi_channel_filter',
 ]
