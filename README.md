@@ -395,6 +395,49 @@ lmtools intensity_filter segmentation.tif intensity_image.tif filtered.tif \
     --visualize-regions --vis-output regions.png
 ```
 
+### Cell Filtering
+
+#### Package
+```python
+from lmtools import overlap_filter, intensity_channel_filter, multi_channel_filter
+
+# Filter cells based on overlap with another mask (e.g., DAPI nuclei)
+filtered_mask = overlap_filter(
+    "cd45_cells.npy",                 # Segmentation mask to filter
+    "dapi_nuclei.npy",                # Reference mask for overlap
+    "filtered_mask.npy",              # Output path
+    overlap_threshold=0.2,            # Require at least 20% overlap
+    relabel=True                      # Relabel objects sequentially
+)
+
+# Filter cells based on intensity in another channel
+filtered_mask = intensity_channel_filter(
+    "cd45_cells.npy",                 # Segmentation mask to filter
+    "cd11b_intensity.tiff",           # Intensity image for measurement
+    "cd11b_negative_cells.npy",       # Output path
+    threshold_method='otsu',          # Use Otsu's thresholding
+    min_intensity=0.01,               # Remove very low intensity objects
+    plot_histogram=True               # Show intensity histogram
+)
+
+# Complete multi-channel filtering pipeline
+final_mask = multi_channel_filter(
+    "cd45_cells.npy",                 # Primary segmentation mask
+    dapi_mask="dapi_nuclei.npy",      # DAPI segmentation for overlap
+    dapi_image="dapi_intensity.tiff", # DAPI intensity image
+    channel_images={                  # Additional channels to filter on
+        'cd11b': "cd11b_intensity.tiff"
+    },
+    dapi_overlap_threshold=0.2,       # DAPI overlap requirement
+    channel_min_intensities={         # Minimum intensities
+        'dapi': 0.05,
+        'cd11b': 0.01
+    },
+    threshold_method='gmm',           # Use GMM-based thresholding
+    plot_histograms=True              # Generate histograms
+)
+```
+
 ## Configuration Files
 
 ### Cellpose Configuration Example
@@ -440,6 +483,8 @@ output:
 # Force GPU usage
 force_gpu: false
 ```
+
+
 
 ## Contributing
 

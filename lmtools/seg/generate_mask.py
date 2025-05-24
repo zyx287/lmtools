@@ -11,6 +11,7 @@ import cv2
 from PIL import Image
 import os
 import argparse
+import logging
 
 def arguments_parser():
     parser = argparse.ArgumentParser(description="Convert QuPath GeoJSON to NPY segmentation mask.")
@@ -50,18 +51,26 @@ def generate_segmentation_mask(geojson_path:str,
         mask = np.zeros((image_width, image_height), dtype=np.uint8) #255 for white, 0 for black
 
         for feature in data['features']:
-            if feature['geometry']['type'] == 'MultiPolygon':
-                for polygon_group in feature['geometry']['coordinates']:
-                    if len(polygon_group) == 0:
-                        continue
-                    # Outer boundary
-                    outer_boundary = np.array(polygon_group[0], np.int32).reshape((-1, 1, 2))
-                    cv2.fillPoly(mask, [outer_boundary], color=255)
-                    # Inner holes
-                    if inner_holes:
-                        for hole in polygon_group[1:]:
-                            hole_boundary = np.array(hole, np.int32).reshape((-1, 1, 2))
-                            cv2.fillPoly(mask, [hole_boundary], color=0)
+            geom = feature['geometry']
+            # normalize to a list of polygons
+            if geom['type'] == 'Polygon' or geom['type'] == 'MultiPolygon':
+                coords_list = [geom['coordinates']]
+            else:
+                logging.warning(f"Unsupported geometry type: {geom['type']}")
+                continue
+
+            for polygon in coords_list:
+                if not polygon:
+                    continue
+
+                # Outer boundary
+                outer_boundary = np.array(polygon[0], np.int32).reshape((-1, 1, 2))
+                cv2.fillPoly(mask, [outer_boundary], color=255)
+                # Inner holes
+                if inner_holes:
+                    for hole in polygon[1:]:
+                        hole_boundary = np.array(hole, np.int32).reshape((-1, 1, 2))
+                        cv2.fillPoly(mask, [hole_boundary], color=0)
 
         os.makedirs(output_dir, exist_ok=True)
 
