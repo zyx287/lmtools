@@ -1,7 +1,7 @@
 '''
 author: zyx
 date: 2025-03-31
-last_modified: 2025-03-31
+last_modified: 2025-05-24
 description: 
     Functions for generating masks from vaious formats
 '''
@@ -12,6 +12,8 @@ from PIL import Image
 import os
 import argparse
 import logging
+
+logger = logging.getLogger(__name__)
 
 def arguments_parser():
     parser = argparse.ArgumentParser(description="Convert QuPath GeoJSON to NPY segmentation mask.")
@@ -29,7 +31,7 @@ def generate_segmentation_mask(geojson_path:str,
                                output_dir:str,
                                image_width:int, image_height:int,
                                inner_holes:bool=True,
-                               downsample_factor:int=4)->bool:
+                               downsample_factor:float=0.1)->bool:
     '''
     Read QuPath GeoJSON->generate segmentation mask->downsampling->saving
     Parms:
@@ -56,7 +58,7 @@ def generate_segmentation_mask(geojson_path:str,
             if geom['type'] == 'Polygon' or geom['type'] == 'MultiPolygon':
                 coords_list = [geom['coordinates']]
             else:
-                logging.warning(f"Unsupported geometry type: {geom['type']}")
+                logger.warning(f"Unsupported geometry type: {geom['type']}")
                 continue
 
             for polygon in coords_list:
@@ -81,10 +83,21 @@ def generate_segmentation_mask(geojson_path:str,
         print(f"Saved full-resolution mask: {full_res_path}")
 
         # Downsample the mask
-        downsampled_mask = Image.fromarray(mask)
-        new_size = (image_width // downsample_factor, image_height // downsample_factor)
-        downsampled_mask = downsampled_mask.resize(new_size, Image.NEAREST)
-        downsampled_mask = np.array(downsampled_mask)
+        # Check if we're downsampling or upsampling
+        if downsample_factor > 1:
+            # Downsampling case
+            new_width = int(image_width / downsample_factor)
+            new_height = int(image_height / downsample_factor)
+            downsampled_mask = cv2.resize(mask, (new_height, new_width), 
+                         interpolation=cv2.INTER_NEAREST)
+        else:
+            # Upsampling case (downsample_factor < 1)
+            new_width = int(image_width / downsample_factor)
+            new_height = int(image_height / downsample_factor) 
+            downsampled_mask = cv2.resize(mask, (new_height, new_width),
+                         interpolation=cv2.INTER_LINEAR)
+            # Threshold to ensure binary mask after interpolation
+            downsampled_mask = (downsampled_mask > 127).astype(np.uint8) * 255
 
         # Save downsampled mask
         downsampled_path = os.path.join(output_dir, f"{base_name}_mask_{downsample_factor}xdown.npy")
