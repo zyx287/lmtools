@@ -28,7 +28,6 @@ from lmtools.seg import (
     visualize_intensity_regions,
     overlap_filter,
     intensity_channel_filter,
-    multi_channel_filter
 )
 
 __all__ = [
@@ -52,5 +51,4 @@ __all__ = [
     'visualize_intensity_regions',
     'overlap_filter',
     'intensity_channel_filter',
-    'multi_channel_filter',
 ]
