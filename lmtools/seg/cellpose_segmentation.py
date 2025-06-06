@@ -14,6 +14,9 @@ import yaml
 from glob import glob
 from pathlib import Path
 import gc
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing as mp
+from functools import partial
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -34,7 +37,7 @@ def clear_gpu_cache(force: bool = False) -> None:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
             gc.collect()
-            logger.debug("GPU cache cleared successfully")
+            logger.info("GPU cache cleared successfully")
     except Exception as e:
         logger.warning(f"Error clearing GPU cache: {e}")
 
@@ -66,6 +69,71 @@ def check_gpu() -> bool:
     except Exception as e:
         logger.warning(f"Error checking GPU availability: {e}")
         return False
+
+def _process_files_on_gpu(
+    gpu_id: int,
+    files: List[str],
+    model_params: Dict,
+    seg_params: Dict,
+    output_suffix: str = '_masks',
+    clear_cache_every_n: int = 5
+) -> List[str]:
+    """
+    Helper function to process files on a specific GPU
+    """
+    try:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+        torch.cuda.set_device(0)# 0 is the only visible device in this context
+        
+        from cellpose import models, io
+        
+        clear_gpu_cache()
+        
+        model = models.CellposeModel(
+            gpu=True,
+            pretrained_model=model_params.get('pretrained_model', 'cpsam')
+        )
+        
+        output_files = []
+        
+        for idx, file in enumerate(files):
+            try:
+                img = io.imread(file)
+                
+                if len(img.shape) == 3 and img.shape[2] >= 3:
+                    channel_idx = seg_params['channels'][0] if seg_params['channels'][0] < img.shape[2] else 0
+                    image_to_segment = img[:, :, channel_idx]
+                else:
+                    image_to_segment = img
+                
+                masks, flows, styles = model.eval(
+                    image_to_segment,
+                    diameter=seg_params.get('diameter', model.diam_labels),
+                    channels=seg_params['channels'],
+                    flow_threshold=seg_params['flow_threshold'],
+                    cellprob_threshold=seg_params['cellprob_threshold'],
+                )
+                
+                output_path = f"{file}{output_suffix}.npy"
+                np.save(output_path, masks)
+                output_files.append(output_path)
+                
+                del masks, flows, styles, img, image_to_segment
+                
+                if (idx + 1) % clear_cache_every_n == 0:
+                    clear_gpu_cache()
+                    
+            except Exception as e:
+                logger.error(f"GPU {gpu_id}: Error processing {file}: {e}")
+                clear_gpu_cache()
+        
+        del model
+        clear_gpu_cache(force=True)
+        return output_files
+        
+    except Exception as e:
+        logger.error(f"Error in GPU {gpu_id} processing: {e}")
+        return []
 
 def load_config(config_path: str) -> Dict:
     """
@@ -142,95 +210,177 @@ def process_directory(
     try:
         from cellpose import io
         
-        # Clear cache at the start
-        if torch.cuda.is_available():
-            clear_gpu_cache(force=True)
-            logger.info("GPU cache cleared before processing directory")
+        # Check if multi-GPU mode is enabled
+        is_multi_gpu = isinstance(model, dict) and model.get('multi_gpu', False)
         
-        # Get image files, excluding any that match the exclude pattern
-        files = io.get_image_files(directory, exclude_pattern)
-        logger.info(f"Found {len(files)} images in {directory}")
+        if is_multi_gpu:
+            # Multi-GPU processing
+            num_gpus = model.get('num_gpus', 1)
+            model_config = model.get('model_config', {})
+            pretrained_model = model.get('pretrained_model', 'cpsam')
+            
+            # Get image files
+            files = io.get_image_files(directory, exclude_pattern)
+            logger.info(f"Found {len(files)} images in {directory}")
+            
+            if not files:
+                logger.warning(f"No image files found in {directory}")
+                return []
+            
+            # Determine actual number of GPUs to use
+            available_gpus = torch.cuda.device_count()
+            actual_gpus = min(num_gpus, available_gpus, len(files))
+            
+            if actual_gpus < num_gpus:
+                logger.warning(f"Requested {num_gpus} GPUs, but only {actual_gpus} available/needed")
+            
+            # Split files into batches
+            files_per_gpu = len(files) // actual_gpus
+            remainder = len(files) % actual_gpus
+            
+            file_batches = []
+            start_idx = 0
+            
+            for gpu_id in range(actual_gpus):
+                batch_size = files_per_gpu + (1 if gpu_id < remainder else 0)
+                end_idx = start_idx + batch_size
+                file_batches.append((gpu_id, files[start_idx:end_idx]))
+                start_idx = end_idx
+            
+            logger.info(f"Distributing files across {actual_gpus} GPUs")
+            
+            # Prepare parameters for multi-GPU processing
+            model_params = {
+                'pretrained_model': pretrained_model,
+                'path': model_config.get('path')
+            }
+            seg_params = {
+                'channels': channels,
+                'diameter': diameter,
+                'flow_threshold': flow_threshold,
+                'cellprob_threshold': cellprob_threshold
+            }
+            
+            # Process using multiple GPUs
+            all_output_files = []
+            ctx = mp.get_context('spawn')
+            
+            with ProcessPoolExecutor(max_workers=actual_gpus, mp_context=ctx) as executor:
+                futures = {}
+                for gpu_id, file_batch in file_batches:
+                    future = executor.submit(
+                        _process_files_on_gpu,
+                        gpu_id,
+                        file_batch,
+                        model_params,
+                        seg_params,
+                        output_suffix,
+                        clear_cache_every_n
+                    )
+                    futures[future] = gpu_id
+                
+                for future in as_completed(futures):
+                    gpu_id = futures[future]
+                    try:
+                        output_files = future.result()
+                        all_output_files.extend(output_files)
+                        logger.info(f"GPU {gpu_id} completed: {len(output_files)} files processed")
+                    except Exception as e:
+                        logger.error(f"GPU {gpu_id} failed: {e}")
+            
+            return all_output_files
+            
+        else:
+            # Single GPU processing (original code)
+            # Clear cache at the start
+            if torch.cuda.is_available():
+                clear_gpu_cache(force=True)
+                logger.info("GPU cache cleared before processing directory")
+            
+            # Get image files, excluding any that match the exclude pattern
+            files = io.get_image_files(directory, exclude_pattern)
+            logger.info(f"Found {len(files)} images in {directory}")
+            
+            if not files:
+                logger.warning(f"No image files found in {directory}")
+                return []
+            
+            output_files = []
         
-        if not files:
-            logger.warning(f"No image files found in {directory}")
-            return []
-        
-        output_files = []
-        
-        for idx, file in enumerate(files):
-            try:
-                # Load image
-                img = io.imread(file)
-                logger.info(f"Processing {file} ({idx+1}/{len(files)}), shape: {img.shape}")
-                
-                # Extract channel to segment (default to channel 1 - green)
-                if len(img.shape) == 3 and img.shape[2] >= 3:
-                    # Multi-channel image (RGB or more)
-                    channel_idx = channels[0] if channels[0] < img.shape[2] else 0
-                    image_to_segment = img[:, :, channel_idx]
-                else:
-                    # Grayscale image
-                    image_to_segment = img
-                
-                # Monitor GPU memory before segmentation
-                if torch.cuda.is_available():
-                    mem_before = torch.cuda.memory_allocated(0) / 1024**3
-                    logger.debug(f"GPU memory before segmentation: {mem_before:.2f} GB")
-                
-                # Run segmentation
-                masks, flows, styles = model.eval(
-                    image_to_segment,
-                    diameter=diameter if diameter is not None else model.diam_labels,
-                    channels=channels,
-                    flow_threshold=flow_threshold,
-                    cellprob_threshold=cellprob_threshold,
-                )
-                
-                # Create output file path
-                output_path = f"{file}{output_suffix}.npy"
-                
-                # Save masks
-                np.save(output_path, masks)
-                logger.info(f"Detected {masks.max()} cells in {file}")
-                logger.info(f"Saved masks to {output_path}")
-                
-                output_files.append(output_path)
-                
-                # Clean up variables
-                del masks, flows, styles, img, image_to_segment
-                
-                # Clear cache based on settings
-                if clear_cache and torch.cuda.is_available():
-                    # Always clear after every nth image or if memory usage is high
-                    should_clear = (idx + 1) % clear_cache_every_n == 0
+            for idx, file in enumerate(files):
+                try:
+                    # Load image
+                    img = io.imread(file)
+                    logger.info(f"Processing {file} ({idx+1}/{len(files)}), shape: {img.shape}")
                     
-                    # Check memory usage
-                    mem_allocated = torch.cuda.memory_allocated(0) / 1024**3
-                    mem_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-                    mem_percent = (mem_allocated / mem_total) * 100
+                    # Extract channel to segment (default to channel 1 - green)
+                    if len(img.shape) == 3 and img.shape[2] >= 3:
+                        # Multi-channel image (RGB or more)
+                        channel_idx = channels[0] if channels[0] < img.shape[2] else 0
+                        image_to_segment = img[:, :, channel_idx]
+                    else:
+                        # Grayscale image
+                        image_to_segment = img
                     
-                    # Force clear if memory usage exceeds 80%
-                    if mem_percent > 80:
-                        should_clear = True
-                        logger.warning(f"GPU memory usage high ({mem_percent:.1f}%), forcing cache clear")
+                    # Monitor GPU memory before segmentation
+                    if torch.cuda.is_available():
+                        mem_before = torch.cuda.memory_allocated(0) / 1024**3
+                        logger.info(f"GPU memory before segmentation: {mem_before:.2f} GB")
                     
-                    if should_clear:
-                        clear_gpu_cache()
-                        logger.debug(f"GPU cache cleared after processing image {idx+1}")
-                
-            except Exception as e:
-                logger.error(f"Error processing file {file}: {e}")
-                # Clear cache on error to prevent memory issues
-                if torch.cuda.is_available():
-                    clear_gpu_cache(force=True)
+                    # Run segmentation
+                    masks, flows, styles = model.eval(
+                        image_to_segment,
+                        diameter=diameter if diameter is not None else model.diam_labels,
+                        channels=channels,
+                        flow_threshold=flow_threshold,
+                        cellprob_threshold=cellprob_threshold,
+                    )
+                    
+                    # Create output file path
+                    output_path = f"{file}{output_suffix}.npy"
+                    
+                    # Save masks
+                    np.save(output_path, masks)
+                    logger.info(f"Detected {masks.max()} cells in {file}")
+                    logger.info(f"Saved masks to {output_path}")
+                    
+                    output_files.append(output_path)
+                    
+                    # Clean up variables
+                    del masks, flows, styles, img, image_to_segment
+                    
+                    # Clear cache based on settings
+                    if clear_cache and torch.cuda.is_available():
+                        # Always clear after every nth image or if memory usage is high
+                        should_clear = (idx + 1) % clear_cache_every_n == 0
+                        
+                        # Check memory usage
+                        mem_allocated = torch.cuda.memory_allocated(0) / 1024**3
+                        mem_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                        mem_percent = (mem_allocated / mem_total) * 100
+                        
+                        # Force clear if memory usage exceeds 80%
+                        if mem_percent > 80:
+                            should_clear = True
+                            logger.warning(f"GPU memory usage high ({mem_percent:.1f}%), forcing cache clear")
+                        
+                        if should_clear:
+                            clear_gpu_cache()
+                            logger.info(f"GPU cache cleared after processing image {idx+1}")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing file {file}: {e}")
+                    # Clear cache on error to prevent memory issues
+                    if torch.cuda.is_available():
+                        clear_gpu_cache(force=True)
         
-        # Final cache clear after processing all images
-        if torch.cuda.is_available():
-            clear_gpu_cache(force=True)
-            logger.info("GPU cache cleared after processing all images")
-        
-        logger.info(f"Completed processing all images in {directory}")
-        return output_files
+            # Final cache clear after processing all images
+            if torch.cuda.is_available():
+                clear_gpu_cache(force=True)
+                logger.info("GPU cache cleared after processing all images")
+            
+            logger.info(f"Completed processing all images in {directory}")
+            return output_files
     
     except Exception as e:
         logger.error(f"Error processing directory {directory}: {e}")
@@ -263,16 +413,24 @@ def run_pipeline(config_path: str) -> List[str]:
         use_gpu = check_gpu()
         force_gpu = config.get('force_gpu', False)
         
+        # Check for multi-GPU configuration
+        multi_gpu_config = config.get('multi_gpu', {})
+        use_multi_gpu = multi_gpu_config.get('enabled', False)
+        num_gpus = multi_gpu_config.get('num_gpus', 1)
+        
         # Configure model
         model_config = config['model']
         model_path = model_config.get('path')
-        pretrained_model = model_config.get('pretrained_model', 'cyto')
+        pretrained_model = model_config.get('pretrained_model', 'cpsam')
         
-        # Load the model
-        model = models.CellposeModel(
-            gpu=use_gpu or force_gpu,
-            pretrained_model=model_path if model_path else pretrained_model
-        )
+        # For multi-GPU, we'll create models inside the process_directory function
+        # For single GPU, create model here
+        model = None
+        if not use_multi_gpu:
+            model = models.CellposeModel(
+                gpu=use_gpu or force_gpu,
+                pretrained_model=model_path if model_path else pretrained_model
+            )
         
         # Get segmentation parameters
         seg_params = config.get('segmentation_params', {})
@@ -319,23 +477,45 @@ def run_pipeline(config_path: str) -> List[str]:
                 logger.info(f"GPU cache cleared before processing directory: {directory}")
             
             # Process the directory
-            output_files = process_directory(
-                directory=directory,
-                model=model,
-                channels=channels,
-                diameter=diameter,
-                flow_threshold=flow_threshold,
-                cellprob_threshold=cellprob_threshold,
-                exclude_pattern=exclude_pattern,
-                output_suffix=output_suffix,
-                clear_cache=clear_cache,
-                clear_cache_every_n=clear_cache_every_n
-            )
+            if use_multi_gpu:
+                # For multi-GPU, pass configuration as model parameter
+                model_info = {
+                    'multi_gpu': True,
+                    'num_gpus': num_gpus,
+                    'model_config': model_config,
+                    'pretrained_model': pretrained_model
+                }
+                output_files = process_directory(
+                    directory=directory,
+                    model=model_info,
+                    channels=channels,
+                    diameter=diameter,
+                    flow_threshold=flow_threshold,
+                    cellprob_threshold=cellprob_threshold,
+                    exclude_pattern=exclude_pattern,
+                    output_suffix=output_suffix,
+                    clear_cache=clear_cache,
+                    clear_cache_every_n=clear_cache_every_n
+                )
+            else:
+                output_files = process_directory(
+                    directory=directory,
+                    model=model,
+                    channels=channels,
+                    diameter=diameter,
+                    flow_threshold=flow_threshold,
+                    cellprob_threshold=cellprob_threshold,
+                    exclude_pattern=exclude_pattern,
+                    output_suffix=output_suffix,
+                    clear_cache=clear_cache,
+                    clear_cache_every_n=clear_cache_every_n
+                )
             
             all_output_files.extend(output_files)
         
         # Final cleanup
-        del model
+        if model is not None:
+            del model
         if torch.cuda.is_available():
             clear_gpu_cache(force=True)
             logger.info("Final GPU cache clear completed")

@@ -42,5 +42,15 @@ output:
   # Clear GPU memory after processing each image
   clear_cache: true
 
+  clear_cache_every_n: 1
+
 # Force GPU usage even if initialization check fails
 force_gpu: false
+
+# Multi-GPU Configuration (optional)
+multi_gpu:
+  # Enable multi-GPU processing
+  enabled: false
+  
+  # Number of GPUs to use (will use min of this value, available GPUs, and number of files)
+  num_gpus: 2
