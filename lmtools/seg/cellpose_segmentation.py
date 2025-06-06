@@ -1,7 +1,7 @@
 '''
 author: zyx
 date: 2025-04-04
-last_modified: 2025-04-05
+last_modified: 2025-06-06
 description: 
     CellPose segmentation pipeline for light microscopy images with enhanced GPU cache management
 '''
@@ -21,7 +21,7 @@ from functools import partial
 # Set up logging
 logger = logging.getLogger(__name__)
 
-def clear_gpu_cache(force: bool = False) -> None:
+def clear_gpu_cache(force: bool = False, gpu_id: Optional[int] = None) -> None:
     """
     Clear GPU cache and run garbage collection
     
@@ -29,6 +29,8 @@ def clear_gpu_cache(force: bool = False) -> None:
     ----------
     force : bool
         If True, forces synchronization before clearing cache
+    gpu_id : int, optional
+        Physical GPU ID for logging purposes (actual GPU being cleared depends on CUDA_VISIBLE_DEVICES)
     """
     try:
         if torch.cuda.is_available():
@@ -37,9 +39,17 @@ def clear_gpu_cache(force: bool = False) -> None:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
             gc.collect()
-            logger.info("GPU cache cleared successfully")
+            
+            # Log which GPU's cache was cleared
+            if gpu_id is not None:
+                logger.info(f"GPU {gpu_id} cache cleared successfully")
+            else:
+                # When gpu_id not provided, show current visible devices
+                visible_devices = os.environ.get('CUDA_VISIBLE_DEVICES', 'all')
+                logger.info(f"GPU cache cleared successfully (visible devices: {visible_devices})")
     except Exception as e:
-        logger.warning(f"Error clearing GPU cache: {e}")
+        gpu_str = f"GPU {gpu_id}" if gpu_id is not None else "GPU"
+        logger.warning(f"Error clearing {gpu_str} cache: {e}")
 
 def check_gpu() -> bool:
     """
@@ -82,12 +92,15 @@ def _process_files_on_gpu(
     Helper function to process files on a specific GPU
     """
     try:
+        # Set this process to only see the specified physical GPU
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-        torch.cuda.set_device(0)# 0 is the only visible device in this context
+        torch.cuda.set_device(0)  # 0 is the only visible device in this context
+        # All GPU operations in this process will use physical GPU {gpu_id}
         
         from cellpose import models, io
         
-        clear_gpu_cache()
+        # Clear cache on the assigned GPU (physical GPU {gpu_id})
+        clear_gpu_cache(gpu_id=gpu_id)
         
         model = models.CellposeModel(
             gpu=True,
@@ -121,14 +134,14 @@ def _process_files_on_gpu(
                 del masks, flows, styles, img, image_to_segment
                 
                 if (idx + 1) % clear_cache_every_n == 0:
-                    clear_gpu_cache()
+                    clear_gpu_cache(gpu_id=gpu_id)
                     
             except Exception as e:
                 logger.error(f"GPU {gpu_id}: Error processing {file}: {e}")
-                clear_gpu_cache()
+                clear_gpu_cache(force=True, gpu_id=gpu_id)
         
         del model
-        clear_gpu_cache(force=True)
+        clear_gpu_cache(force=True, gpu_id=gpu_id)
         return output_files
         
     except Exception as e:
@@ -366,7 +379,7 @@ def process_directory(
                         
                         if should_clear:
                             clear_gpu_cache()
-                            logger.info(f"GPU cache cleared after processing image {idx+1}")
+                            logger.debug(f"GPU cache cleared after processing image {idx+1}")
                     
                 except Exception as e:
                     logger.error(f"Error processing file {file}: {e}")
@@ -530,7 +543,8 @@ def run_pipeline(config_path: str) -> List[str]:
         logger.error(f"Error running pipeline: {e}")
         # Ensure cache is cleared on error
         if torch.cuda.is_available():
-            clear_gpu_cache(force=True)
+            current_gpu_id = torch.cuda.current_device()
+            clear_gpu_cache(force=True, gpu_id=current_gpu_id)
         return []
 
 if __name__ == "__main__":
