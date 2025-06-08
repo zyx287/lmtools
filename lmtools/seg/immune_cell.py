@@ -10,6 +10,10 @@ import argparse
 from pathlib import Path
 import numpy as np
 import tifffile
+import json
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass, field, asdict
 
 from scipy.ndimage import binary_erosion, find_objects
 from skimage.morphology import ball
@@ -17,7 +21,7 @@ from skimage.filters import threshold_otsu
 from skimage.measure import label as sk_label
 from skimage.segmentation import relabel_sequential
 
-from morphology import erode_mask_2D_with_ball, generate_2D_donut
+from ..compute.morphology import erode_mask_2D_with_ball, generate_2D_donut
 
 import matplotlib.pyplot as plt
 
@@ -29,45 +33,227 @@ def load_image(path: Path) -> np.ndarray:
     """Load an image volume or slice (TIFF)."""
     return tifffile.imread(path)
 
+
+@dataclass
+class ProcessingStep:
+    """Record a single processing step in the pipeline."""
+    step_name: str
+    timestamp: str
+    parameters: Dict[str, any]
+    input_data: List[str]
+    output_data: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@dataclass
+class ImageMetadata:
+    """Metadata for tracking image processing pipeline."""
+    experiment_name: str
+    sample_id: str
+    acquisition_date: Optional[str] = None
+    processing_date: str = field(default_factory=lambda: datetime.now().isoformat())
+    processing_steps: List[ProcessingStep] = field(default_factory=list)
+    channel_mappings: Dict[str, str] = field(default_factory=dict)
+    segmentation_sources: Dict[str, str] = field(default_factory=dict)
+    intensity_filter_sources: Dict[str, str] = field(default_factory=dict)
+    notes: Optional[str] = None
+    
+    def add_step(self, step: ProcessingStep):
+        """Add a processing step to the history."""
+        self.processing_steps.append(step)
+    
+    def to_json(self, filepath: Path):
+        """Save metadata to JSON file."""
+        with open(filepath, 'w') as f:
+            json.dump(asdict(self), f, indent=2)
+    
+    @classmethod
+    def from_json(cls, filepath: Path):
+        """Load metadata from JSON file."""
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        # Convert processing steps back to ProcessingStep objects
+        data['processing_steps'] = [ProcessingStep(**step) for step in data['processing_steps']]
+        return cls(**data)
+
+
+@dataclass
 class DataPaths:
     """
-    Encapsulate file paths for segmentation masks and raw images for each channel.
+    Enhanced data paths manager with automatic path discovery and metadata tracking.
     """
-    def __init__(
-        self,
-        cy5_seg: Path,
-        cy5_img: Path,
-        dapi_seg: Path,
-        dapi_img: Path,
-        cd11b_img: Path,
-        qupath_seg: Path
-    ):
-        # segmentation masks:
-        self.cy5_seg = Path(cy5_seg)
-        self.dapi_seg = Path(dapi_seg)
-        self.qupath_seg = Path(qupath_seg)
-        # raw images:
-        self.cy5_img = Path(cy5_img)
-        self.dapi_img = Path(dapi_img)
-        self.cd11b_img = Path(cd11b_img)
-
-    def load_segs(self):
+    base_dir: Path
+    base_name: str
+    metadata: ImageMetadata
+    
+    # Channel suffixes
+    channel_suffixes: Dict[str, str] = field(default_factory=lambda: {
+        'cy5': '_CY5.tif',
+        'cy3': '_CY3.tif',
+        'dapi': '_DAPI.tif',
+        'cd11b': '_CD11b.tif'  # Can be customized
+    })
+    
+    # Segmentation suffixes
+    seg_suffixes: Dict[str, str] = field(default_factory=lambda: {
+        'cy5_seg': '_CY5_cellpose_masks.npy',
+        'cy3_seg': '_CY3_cellpose_masks.npy',
+        'dapi_seg': '_DAPI_cellpose_masks.npy',
+        'qupath_seg': '_qupath_mask.npy'
+    })
+    
+    # Processed output paths
+    output_dir: Optional[Path] = None
+    _processed_masks: Dict[str, Path] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Initialize paths and create output directory if needed."""
+        self.base_dir = Path(self.base_dir)
+        if self.output_dir is None:
+            self.output_dir = self.base_dir / 'processed'
+        else:
+            self.output_dir = Path(self.output_dir)
+        
+        # Create output directory if it doesn't exist
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Update metadata channel mappings
+        for channel, suffix in self.channel_suffixes.items():
+            self.metadata.channel_mappings[channel] = f"{self.base_name}{suffix}"
+    
+    def get_image_path(self, channel: str) -> Path:
+        """Get image path for a specific channel."""
+        suffix = self.channel_suffixes.get(channel)
+        if suffix is None:
+            raise ValueError(f"Unknown channel: {channel}")
+        
+        path = self.base_dir / f"{self.base_name}{suffix}"
+        if not path.exists():
+            # Try alternative naming patterns
+            alt_patterns = [
+                f"{self.base_name}_{channel.upper()}.tif",
+                f"{self.base_name}-{channel.upper()}.tif",
+                f"{channel.upper()}_{self.base_name}.tif"
+            ]
+            for pattern in alt_patterns:
+                alt_path = self.base_dir / pattern
+                if alt_path.exists():
+                    path = alt_path
+                    break
+            else:
+                raise FileNotFoundError(f"Could not find {channel} image with base name {self.base_name}")
+        
+        return path
+    
+    def get_seg_path(self, seg_type: str) -> Path:
+        """Get segmentation path for a specific type."""
+        suffix = self.seg_suffixes.get(seg_type)
+        if suffix is None:
+            raise ValueError(f"Unknown segmentation type: {seg_type}")
+        
+        path = self.base_dir / f"{self.base_name}{suffix}"
+        if not path.exists():
+            # Try without base name for some seg types
+            if seg_type == 'qupath_seg':
+                alt_path = self.base_dir / 'qupath_mask.npy'
+                if alt_path.exists():
+                    path = alt_path
+                else:
+                    raise FileNotFoundError(f"Could not find {seg_type} with base name {self.base_name}")
+            else:
+                raise FileNotFoundError(f"Could not find {seg_type} with base name {self.base_name}")
+        
+        # Track segmentation source
+        self.metadata.segmentation_sources[seg_type] = str(path)
+        return path
+    
+    def save_processed_mask(self, mask: np.ndarray, name: str, processing_info: Optional[ProcessingStep] = None) -> Path:
+        """Save a processed mask and track it."""
+        output_path = self.output_dir / f"{self.base_name}_{name}.npy"
+        np.save(output_path, mask)
+        
+        self._processed_masks[name] = output_path
+        
+        # Add processing step to metadata
+        if processing_info:
+            processing_info.output_data = str(output_path)
+            self.metadata.add_step(processing_info)
+        
+        return output_path
+    
+    def save_metadata(self, filename: Optional[str] = None):
+        """Save metadata to JSON file."""
+        if filename is None:
+            filename = f"{self.base_name}_metadata.json"
+        
+        metadata_path = self.output_dir / filename
+        self.metadata.to_json(metadata_path)
+        return metadata_path
+    
+    @property
+    def cy5_img(self) -> Path:
+        return self.get_image_path('cy5')
+    
+    @property
+    def cy3_img(self) -> Path:
+        return self.get_image_path('cy3')
+    
+    @property
+    def dapi_img(self) -> Path:
+        return self.get_image_path('dapi')
+    
+    @property
+    def cd11b_img(self) -> Path:
+        return self.get_image_path('cd11b')
+    
+    @property
+    def cy5_seg(self) -> Path:
+        return self.get_seg_path('cy5_seg')
+    
+    @property
+    def cy3_seg(self) -> Path:
+        return self.get_seg_path('cy3_seg')
+    
+    @property
+    def dapi_seg(self) -> Path:
+        return self.get_seg_path('dapi_seg')
+    
+    @property
+    def qupath_seg(self) -> Path:
+        return self.get_seg_path('qupath_seg')
+    
+    def load_segs(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Returns tuple of segmentation masks: (CD45, DAPI, QuPath).
+        Returns tuple of segmentation masks: (CY5, DAPI, QuPath).
         """
         seg_cy5 = load_segmentation(self.cy5_seg)
         seg_dapi = load_segmentation(self.dapi_seg)
         seg_qupath = load_segmentation(self.qupath_seg)
         return seg_cy5, seg_dapi, seg_qupath
 
-    def load_imgs(self):
+    def load_imgs(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Returns tuple of raw image arrays: (CD45, DAPI, CD11b).
+        Returns tuple of raw image arrays: (CY5, DAPI, CD11b).
         """
         img_cy5 = load_image(self.cy5_img)
         img_dapi = load_image(self.dapi_img)
         img_cd11b = load_image(self.cd11b_img)
         return img_cy5, img_dapi, img_cd11b
+    
+    def get_all_paths_dict(self) -> Dict[str, Path]:
+        """Get dictionary of all available paths."""
+        paths = {
+            'cy5_img': self.cy5_img,
+            'cy3_img': self.cy3_img,
+            'dapi_img': self.dapi_img,
+            'cd11b_img': self.cd11b_img,
+            'cy5_seg': self.cy5_seg,
+            'dapi_seg': self.dapi_seg,
+            'qupath_seg': self.qupath_seg,
+            'output_dir': self.output_dir
+        }
+        paths.update({f'processed_{k}': v for k, v in self._processed_masks.items()})
+        return paths
 
 def compute_statistics():
     pass
@@ -75,7 +261,9 @@ def compute_statistics():
 def filter_by_overlap(
     seg_mask: np.ndarray,
     ref_mask: np.ndarray,
-    min_overlap_ratio: float
+    min_overlap_ratio: float,
+    data_paths: Optional[DataPaths] = None,
+    step_name: str = "overlap_filter"
 ) -> np.ndarray:
     """
     Keep only objects with overlap(ref_mask)/area >= min_overlap_ratio.
@@ -83,6 +271,8 @@ def filter_by_overlap(
     filtered = seg_mask.copy()
     objects = find_objects(seg_mask)
     labels = np.unique(seg_mask)[1:]
+    removed_count = 0
+    
     for lab in labels:
         slc = objects[lab-1]
         if slc is None:
@@ -92,6 +282,23 @@ def filter_by_overlap(
         area = region.sum()
         if overlap/area < min_overlap_ratio:
             filtered[slc][region] = 0
+            removed_count += 1
+    
+    # Track processing step if data_paths provided
+    if data_paths:
+        step = ProcessingStep(
+            step_name=step_name,
+            timestamp=datetime.now().isoformat(),
+            parameters={
+                "min_overlap_ratio": min_overlap_ratio,
+                "removed_objects": removed_count,
+                "remaining_objects": len(labels) - removed_count
+            },
+            input_data=["segmentation_mask", "reference_mask"],
+            notes=f"Filtered objects with overlap ratio < {min_overlap_ratio}"
+        )
+        data_paths.metadata.add_step(step)
+    
     return filtered
 
 
@@ -175,9 +382,14 @@ def intensity_filter(
     avg_int: dict,
     upper_thresh: float,
     lower_thresh: float=0,
+    data_paths: Optional[DataPaths] = None,
+    intensity_channel: Optional[str] = None,
+    step_name: str = "intensity_filter"
 ) -> np.ndarray:
     filt = seg_mask.copy()
     objs = find_objects(seg_mask)
+    removed_count = 0
+    
     for lab, mean in avg_int.items():
         slc = objs[lab-1]
         if slc is None:
@@ -185,6 +397,28 @@ def intensity_filter(
         region = (seg_mask[slc]==lab)
         if mean>upper_thresh or mean<lower_thresh:
             filt[slc][region]=0
+            removed_count += 1
+    
+    # Track processing step and intensity source
+    if data_paths:
+        if intensity_channel:
+            data_paths.metadata.intensity_filter_sources[step_name] = intensity_channel
+        
+        step = ProcessingStep(
+            step_name=step_name,
+            timestamp=datetime.now().isoformat(),
+            parameters={
+                "upper_threshold": upper_thresh,
+                "lower_threshold": lower_thresh,
+                "intensity_channel": intensity_channel,
+                "removed_objects": removed_count,
+                "remaining_objects": len(avg_int) - removed_count
+            },
+            input_data=["segmentation_mask", f"intensity_image_{intensity_channel}" if intensity_channel else "intensity_image"],
+            notes=f"Filtered objects with intensity outside [{lower_thresh}, {upper_thresh}]"
+        )
+        data_paths.metadata.add_step(step)
+    
     return filt
 
 def reassign_labels(mask: np.ndarray) -> np.ndarray:
@@ -241,3 +475,133 @@ def plot_dirc_distribution(intensity_dict):
     plt.show()
     
     return mean_intensity, median_intensity
+
+
+def create_data_paths(
+    base_dir: Union[str, Path],
+    base_name: str,
+    experiment_name: str,
+    sample_id: str,
+    acquisition_date: Optional[str] = None,
+    output_dir: Optional[Union[str, Path]] = None,
+    channel_suffixes: Optional[Dict[str, str]] = None,
+    seg_suffixes: Optional[Dict[str, str]] = None,
+    notes: Optional[str] = None
+) -> DataPaths:
+    """
+    Convenience function to create a DataPaths instance with metadata.
+    
+    Parameters
+    ----------
+    base_dir : str or Path
+        Base directory containing the image and segmentation files
+    base_name : str
+        Base name for files (e.g., "Sample01" for files like "Sample01_CY5.tif")
+    experiment_name : str
+        Name of the experiment
+    sample_id : str
+        Sample identifier
+    acquisition_date : str, optional
+        Date when images were acquired
+    output_dir : str or Path, optional
+        Output directory for processed files (default: base_dir/processed)
+    channel_suffixes : dict, optional
+        Custom channel suffixes mapping
+    seg_suffixes : dict, optional
+        Custom segmentation suffixes mapping
+    notes : str, optional
+        Additional notes about the experiment
+    
+    Returns
+    -------
+    DataPaths
+        Configured DataPaths instance
+    """
+    # Create metadata
+    metadata = ImageMetadata(
+        experiment_name=experiment_name,
+        sample_id=sample_id,
+        acquisition_date=acquisition_date,
+        notes=notes
+    )
+    
+    # Create DataPaths instance
+    data_paths = DataPaths(
+        base_dir=base_dir,
+        base_name=base_name,
+        metadata=metadata,
+        output_dir=output_dir
+    )
+    
+    # Update custom suffixes if provided
+    if channel_suffixes:
+        data_paths.channel_suffixes.update(channel_suffixes)
+    if seg_suffixes:
+        data_paths.seg_suffixes.update(seg_suffixes)
+    
+    return data_paths
+
+
+# Example usage function
+def example_usage():
+    """
+    Example of how to use the enhanced DataPaths class with metadata tracking.
+    """
+    # Create data paths with metadata
+    data_paths = create_data_paths(
+        base_dir="/path/to/data",
+        base_name="Sample01",
+        experiment_name="Immune Cell Analysis",
+        sample_id="Mouse_01_Brain_Section_03",
+        acquisition_date="2024-01-15",
+        notes="60x oil immersion, Z-stack 50 slices"
+    )
+    
+    # Load images and segmentations
+    img_cy5, img_dapi, img_cd11b = data_paths.load_imgs()
+    seg_cy5, seg_dapi, seg_qupath = data_paths.load_segs()
+    
+    # Process with overlap filter
+    filtered_cy5 = filter_by_overlap(
+        seg_cy5, 
+        seg_dapi, 
+        min_overlap_ratio=0.5,
+        data_paths=data_paths,
+        step_name="cy5_dapi_overlap_filter"
+    )
+    
+    # Save processed mask
+    data_paths.save_processed_mask(
+        filtered_cy5, 
+        "cy5_dapi_filtered",
+        ProcessingStep(
+            step_name="save_cy5_filtered",
+            timestamp=datetime.now().isoformat(),
+            parameters={"format": "numpy"},
+            input_data=["cy5_dapi_overlap_filter"],
+            notes="Saved CY5 cells with >50% DAPI overlap"
+        )
+    )
+    
+    # Compute intensities and filter
+    avg_cd11b = compute_average_intensity(filtered_cy5, img_cd11b, use_donut=True)
+    
+    # Apply intensity filter
+    final_mask = intensity_filter(
+        filtered_cy5,
+        avg_cd11b,
+        upper_thresh=1000,
+        lower_thresh=100,
+        data_paths=data_paths,
+        intensity_channel="cd11b",
+        step_name="cd11b_intensity_filter"
+    )
+    
+    # Save final result and metadata
+    data_paths.save_processed_mask(final_mask, "final_immune_cells")
+    metadata_path = data_paths.save_metadata()
+    
+    print(f"Processing complete. Metadata saved to: {metadata_path}")
+    print(f"All paths: {data_paths.get_all_paths_dict()}")
+    
+    return data_paths

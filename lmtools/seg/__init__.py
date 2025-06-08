@@ -5,6 +5,16 @@ from .cellpose_segmentation import run_pipeline, check_gpu, load_config, process
 from .basic_segmentation import threshold_segment, watershed_segment, region_growing_segment
 from .intensity_filter import intensity_filter, visualize_intensity_regions
 from .cell_filter import overlap_filter, intensity_channel_filter
+from .immune_cell import (
+    DataPaths, 
+    ImageMetadata, 
+    ProcessingStep,
+    create_data_paths,
+    filter_by_overlap as immune_filter_by_overlap,
+    size_and_dapi_filter,
+    compute_average_intensity,
+    intensity_filter as immune_intensity_filter
+)
 
 __all__ = [
     'generate_segmentation_mask',
@@ -23,4 +33,12 @@ __all__ = [
     'visualize_intensity_regions',
     'overlap_filter',
     'intensity_channel_filter',
+    'DataPaths',
+    'ImageMetadata',
+    'ProcessingStep',
+    'create_data_paths',
+    'immune_filter_by_overlap',
+    'size_and_dapi_filter',
+    'compute_average_intensity',
+    'immune_intensity_filter',
 ]
