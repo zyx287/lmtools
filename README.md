@@ -27,6 +27,28 @@ pip install .[dev]
   - Extract bounding boxes for objects
   - Summarize segmentation results
 
+## Napari Plugin
+
+LM Tools is now available as a napari plugin! After installation, you can access all the main functionality through napari's GUI interface.
+
+### Using the Plugin
+
+1. Start napari: `napari`
+2. Go to `Plugins` → `lmtools` in the menu
+3. Select the tool you want to use
+
+Available widgets include:
+- Load ND2 files
+- Cellpose segmentation
+- Basic segmentation (threshold, watershed)
+- Channel splitting
+- Intensity-based filtering
+- Segmentation analysis
+- Image downsampling
+- QuPath mask generation
+
+See [lmtools/napari_plugin/README.md](lmtools/napari_plugin/README.md) for detailed plugin documentation.
+
 ## Usage Examples
 
 ### Loading ND2 Files

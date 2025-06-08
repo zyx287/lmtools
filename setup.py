@@ -10,11 +10,15 @@ if __name__ == "__main__":
             "zarr==2.18.2",
             "nd2",
             "napari",
+            "napari-plugin-engine",
+            "magicgui",
             "opencv-python",
             "pillow",
             "scipy",
             "pandas",
             "pyyaml",
+            "scikit-image",
+            "tifffile",
         ],
         extras_require={
             "cellpose": ["cellpose", "torch"],
@@ -23,6 +27,9 @@ if __name__ == "__main__":
         entry_points={
             'console_scripts': [
                 'lmtools=lmtools.__main__:main',
+            ],
+            'napari.manifest': [
+                'lmtools = lmtools.napari_plugin:napari.yaml',
             ],
         },
     )
