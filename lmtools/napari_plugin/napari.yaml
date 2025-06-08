@@ -1,0 +1,50 @@
+name: lmtools
+display_name: LM Tools
+contributions:
+  commands:
+    - id: lmtools.load_nd2
+      python_name: lmtools.napari_plugin._widgets:load_nd2_widget
+      title: Load ND2 File
+    - id: lmtools.cellpose_segment
+      python_name: lmtools.napari_plugin._widgets:cellpose_segmentation_widget
+      title: Cellpose Segmentation
+    - id: lmtools.cellpose_config
+      python_name: lmtools.napari_plugin._widgets:create_cellpose_config_widget
+      title: Create Cellpose Config
+    - id: lmtools.basic_segment
+      python_name: lmtools.napari_plugin._widgets:basic_segmentation_widget
+      title: Basic Segmentation
+    - id: lmtools.split_channels
+      python_name: lmtools.napari_plugin._widgets:split_channels_widget
+      title: Split Channels
+    - id: lmtools.intensity_filter
+      python_name: lmtools.napari_plugin._widgets:intensity_filter_widget
+      title: Filter by Intensity
+    - id: lmtools.analyze_segmentation
+      python_name: lmtools.napari_plugin._widgets:analyze_segmentation_widget
+      title: Analyze Segmentation
+    - id: lmtools.downsample
+      python_name: lmtools.napari_plugin._widgets:downsample_widget
+      title: Downsample Image
+    - id: lmtools.generate_mask
+      python_name: lmtools.napari_plugin._widgets:generate_mask_widget
+      title: Generate Mask from QuPath
+  widgets:
+    - command: lmtools.load_nd2
+      display_name: Load ND2 File
+    - command: lmtools.cellpose_segment
+      display_name: Cellpose Segmentation
+    - command: lmtools.cellpose_config
+      display_name: Create Cellpose Config
+    - command: lmtools.basic_segment
+      display_name: Basic Segmentation
+    - command: lmtools.split_channels
+      display_name: Split Channels
+    - command: lmtools.intensity_filter
+      display_name: Filter by Intensity
+    - command: lmtools.analyze_segmentation
+      display_name: Analyze Segmentation
+    - command: lmtools.downsample
+      display_name: Downsample Image
+    - command: lmtools.generate_mask
+      display_name: Generate Mask from QuPath
