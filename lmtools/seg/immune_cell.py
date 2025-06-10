@@ -479,14 +479,40 @@ def intensity_filter(
     return filt
 
 def reassign_labels(mask: np.ndarray) -> np.ndarray:
+    '''
+    Relabel images based on connectivity (might hugely reduce the label count).
+    '''
     return sk_label(mask>0)
 
 def relabel_sequential_labels(mask: np.ndarray) -> np.ndarray:
+    '''
+    Relabel sequentially to ensure labels are contiguous and start from 1.
+    Would not generate/remove any labels, just reassign them.
+    '''
     nm, _, _ = relabel_sequential(mask)
     return nm
 
 def count_cells(mask: np.ndarray) -> int:
-    return len(np.unique(mask)[1:])
+    """
+    Count the number of unique cell labels in a segmentation mask, excluding background (0).
+    This implementation uses find_objects for better performance with large masks.
+    Parameters
+    ----------
+    mask : np.ndarray
+        Segmentation mask with integer labels
+    Returns
+    -------
+    int
+        Count of unique cell labels (excluding background)
+    """
+    if mask.size == 0 or mask.max() == 0:  # No cells
+        return 0
+    
+    # find_objects returns a list of slices for each label
+    objects = find_objects(mask)
+    
+    # Count non-None entries (meaning the label exists in the image)
+    return sum(obj is not None for obj in objects)
 
 
 #### Visualize
@@ -532,6 +558,99 @@ def plot_dirc_distribution(intensity_dict):
     plt.show()
     
     return mean_intensity, median_intensity
+
+
+def create_data_paths_from_organized(
+    organized_sample_dir: Union[str, Path],
+    experiment_name: str,
+    acquisition_date: Optional[str] = None,
+    notes: Optional[str] = None
+) -> DataPaths:
+    """
+    Create a DataPaths instance from organize_data output structure.
+    
+    This helper function automatically configures DataPaths to work with
+    the directory structure created by lmtools.io.organize_data().
+    
+    Parameters
+    ----------
+    organized_sample_dir : str or Path
+        Path to a sample directory created by organize_data
+        (e.g., "/organized/samples/Sample01")
+    experiment_name : str
+        Name of the experiment
+    acquisition_date : str, optional
+        Date when images were acquired
+    notes : str, optional
+        Additional notes about the experiment
+    
+    Returns
+    -------
+    DataPaths
+        Configured DataPaths instance that works with organize_data structure
+    
+    Example
+    -------
+    >>> # After running organize_data
+    >>> from lmtools.seg.immune_cell import create_data_paths_from_organized
+    >>> 
+    >>> # Point to the organized sample directory
+    >>> data_paths = create_data_paths_from_organized(
+    ...     organized_sample_dir="/data/organized/samples/Sample01",
+    ...     experiment_name="Immune Cell Analysis"
+    ... )
+    >>> 
+    >>> # Now you can use it normally
+    >>> img_cy5, img_dapi, img_cd11b = data_paths.load_imgs()
+    >>> seg_cy5, seg_dapi, seg_qupath = data_paths.load_segs()
+    """
+    organized_dir = Path(organized_sample_dir)
+    
+    # Extract sample_id from directory name
+    sample_id = organized_dir.name
+    
+    # Check if sample_metadata.json exists and load it
+    metadata_file = organized_dir / "sample_metadata.json"
+    if metadata_file.exists():
+        with open(metadata_file, 'r') as f:
+            sample_meta = json.load(f)
+            # Use the sample_id from metadata if available
+            sample_id = sample_meta.get('sample_id', sample_id)
+    
+    # Configure for organize_data directory structure
+    return create_data_paths(
+        base_dir=organized_dir,
+        base_name=sample_id,
+        experiment_name=experiment_name,
+        sample_id=sample_id,
+        acquisition_date=acquisition_date,
+        output_dir=organized_dir / "results",  # Use existing results directory
+        channel_suffixes={
+            'cy5': '_CY5.tiff',   # organize_data uses .tiff
+            'cy3': '_CY3.tiff',
+            'dapi': '_DAPI.tiff',
+            'cd11b': '_CD11b.tiff'
+        },
+        seg_suffixes={
+            'cy5_seg': '_CY5_masks.npy',      # organize_data naming
+            'cy3_seg': '_CY3_masks.npy',
+            'dapi_seg': '_DAPI_masks.npy',
+            'qupath_seg': '_qupath_mask.npy'
+        },
+        channel_dirs={
+            'cy5': 'raw_images',
+            'cy3': 'raw_images',
+            'dapi': 'raw_images',
+            'cd11b': 'raw_images'
+        },
+        seg_dirs={
+            'cy5_seg': 'segmentations',
+            'cy3_seg': 'segmentations',
+            'dapi_seg': 'segmentations',
+            'qupath_seg': 'segmentations'
+        },
+        notes=notes
+    )
 
 
 def create_data_paths(

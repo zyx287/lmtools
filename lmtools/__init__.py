@@ -2,7 +2,7 @@
 LMTools - Tools and scripts for processing and visualizing light microscopy data.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.2.0"
 
 # Import main functionality for easier access
 from lmtools.io import (
@@ -12,7 +12,9 @@ from lmtools.io import (
     split_channels, 
     batch_split_channels,
     transform_and_split,
-    batch_transform_and_split
+    batch_transform_and_split,
+    organize_data,
+    DataOrganizer
 )
 from lmtools.seg import (
     generate_segmentation_mask, 
@@ -28,6 +30,10 @@ from lmtools.seg import (
     visualize_intensity_regions,
     overlap_filter,
     intensity_channel_filter,
+    create_data_paths,
+    filter_by_overlap,
+    compute_average_intensity,
+    count_cells
 )
 
 __all__ = [
