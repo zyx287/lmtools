@@ -1,85 +1,116 @@
-# lmtools
+# LMTools
 
-Tools and scripts for processing and visualizing light microscopy data.
+A Python package for light microscopy image analysis.
 
 ## Installation
 
 ```bash
-# Basic installation
+git clone https://github.com/zyx287/lmtools.git
+
+cd lmtools
+
 pip install .
 
 # With cellpose support
 pip install .[cellpose]
 
-# With development tools
-pip install .[dev]
+# Development installation
+pip install -e .[dev]
+```
+
+## Quick Start
+
+```bash
+# Organize microscopy data from TGXS Slide Scanner
+lmtools organize-data -s /raw/images -o /organized --all
+
+# Run cellpose segmentation
+lmtools cellpose-segment config.yaml
+
+# Load and visualize ND2 files using Napari
+lmtools load-nd2 image.nd2
 ```
 
 ## Features
 
-- **I/O Operations**: Load and visualize microscopy data formats (ND2)
-- **Segmentation Tools**: 
-  - Generate masks from QuPath GeoJSON annotations
-  - Extract masks from Cellpose outputs
-  - Run Cellpose segmentation pipelines with configuration files
-- **Analysis Tools**:
-  - Analyze segmentation masks for statistics
-  - Extract bounding boxes for objects
-  - Summarize segmentation results
+- **Data Organization**: Automated workflow for organizing microscopy images
+- **Image I/O**: Load various microscopy formats (ND2, TIFF)
+- **Segmentation**: Multiple segmentation methods including cellpose integration
+- **Image Processing**: Channel splitting, downsampling, transformations
+- **Analysis Tools**: Intensity filtering, segmentation analysis, cell counting
+- **Napari Plugin**: Interactive GUI for all features
 
-## Napari Plugin
+---
 
-LM Tools is now available as a napari plugin! After installation, you can access all the main functionality through napari's GUI interface.
+## Data Organization Workflow
 
-### Using the Plugin
+Organize raw TGXS Slide Scanner images for batch processing and analysis.
 
-1. Start napari: `napari`
-2. Go to `Plugins` → `lmtools` in the menu
-3. Select the tool you want to use
+### Expected Format
+Files should be named: `{sample_id}_{CHANNEL}.tiff` (e.g., `Sample01_CY5.tiff`)
 
-Available widgets include:
-- Load ND2 files
-- Cellpose segmentation
-- Basic segmentation (threshold, watershed)
-- Channel splitting
-- Intensity-based filtering
-- Segmentation analysis
-- Image downsampling
-- QuPath mask generation
+### Two-Step Organization
 
-See [lmtools/napari_plugin/README.md](lmtools/napari_plugin/README.md) for detailed plugin documentation.
+```bash
+# Step 1: Organize by channel for batch segmentation
+lmtools organize-data -s /raw/images -o /organized --step 1
 
-## Usage Examples
+# Step 2: Reorganize by sample after segmentation  
+lmtools organize-data -s /raw/images -o /organized --step 2
+
+# Or run both steps
+lmtools organize-data -s /raw/images -o /organized --all
+```
+
+### Python API
+
+```python
+from lmtools.io import organize_data
+
+# Organize data
+channel_df, sample_df = organize_data('/raw/images', '/organized')
+```
+
+### Output Structure
+
+```
+organized/
+├── channels_for_segmentation/    # Step 1
+│   ├── CY5/
+│   ├── CY3/
+│   └── DAPI/
+└── samples/                      # Step 2
+    ├── Sample01/
+    │   ├── raw_images/
+    │   ├── segmentations/
+    │   ├── results/
+    │   └── sample_metadata.json
+    └── master_sample_list.csv
+```
+
+---
+
+## Image I/O Operations
 
 ### Loading ND2 Files
 
-#### As a Python package
-
 ```python
-from lmtools import load_nd2
+from lmtools.io import load_nd2
 
-# Load and visualize an ND2 file
-viewer = load_nd2("path/to/microscopy_image.nd2")
-
-# Access the viewer object for further customization
-viewer.add_shapes(...)
-viewer.screenshot("screenshot.png")
+# Load and visualize
+viewer = load_nd2("microscopy_image.nd2")
 ```
-
-#### From the command line
 
 ```bash
-# Load and visualize an ND2 file
-lmtools load_nd2 path/to/microscopy_image.nd2
+lmtools load-nd2 microscopy_image.nd2
 ```
 
-### Image down-sampling
+### Image Downsampling
 
-#### As a package
 ```python
-from lmtools import downsample_image, batch_downsample
+from lmtools.io import downsample_image, batch_downsample
 
-# Downsample a single image to 50% size using bicubic interpolation
+# Single image
 downsampled = downsample_image(
     "input.tif", 
     "output.tif",
@@ -87,55 +118,39 @@ downsampled = downsample_image(
     method="bicubic"
 )
 
-# Downsample all TIFF images in a directory
-# Using Lanczos algorithm for highest quality
+# Batch processing
 batch_downsample(
     "input_directory",
-    "output_directory",
-    scale_factor=0.25,  # Reduce to 25% of original size
+    "output_directory", 
+    scale_factor=0.25,
     method="lanczos",
-    recursive=True      # Process subdirectories too
-)
-
-# Advanced use: Different scale factors for each dimension
-# This creates a non-uniform scaling
-downsampled = downsample_image(
-    "input.tif",
-    "output.tif",
-    scale_factor=(0.5, 0.75),  # Scale height by 0.5, width by 0.75
-    method="gaussian",         # Use Gaussian pre-filtering for smoother results
-    library="skimage"          # Force use of scikit-image
+    recursive=True
 )
 ```
 
-#### Command line
 ```bash
-# Basic usage - downsample a single image with default settings (50% size, bicubic)
-lmtools downsample input.tif output.tif
-
+# Command line
+lmtools downsample input.tif output.tif --scale 0.5 --method bicubic
+lmtools downsample input_dir/ output_dir/ --recursive --method lanczos
+# Significant downsampling using area method (better for small output sizes)
+lmtools downsample input.tif output.tif --scale 0.1 --method area --library opencv
 # Batch process a directory using lanczos algorithm
 lmtools downsample input_directory/ output_directory/ --method lanczos --recursive
 
-# Significant downsampling using area method (better for small output sizes)
-lmtools downsample input.tif output.tif --scale 0.1 --method area --library opencv
-
-# Enable verbose logging for troubleshooting
-lmtools downsample input.tif output.tif --verbose
 ```
-### Channel splitting
-#### Package
-```python
-from lmtools import split_channels
 
-# Split a multi-channel image using custom names
+### Channel Splitting
+
+```python
+from lmtools.io import split_channels, batch_split_channels
+
+# Split multi-channel image
 output_files = split_channels(
-    "microscopy_image.tif",
-    channel_names=["R", "G", "CY5"]
+    "multi_channel.tif",
+    channel_names=["DAPI", "GFP", "mCherry"]
 )
 
-# Process all images in a directory
-from lmtools import batch_split_channels
-
+# Batch processing
 batch_split_channels(
     "input_directory",
     output_dir="output_directory",
@@ -143,373 +158,302 @@ batch_split_channels(
     recursive=True
 )
 ```
-#### CLI
+
 ```bash
-# Basic usage - split a single image with default channel names
-lmtools split_channels multi_channel_image.tif
-
-# Specify output directory and custom channel names
-lmtools split_channels multi_channel_image.tif --output ./channels/ --sequence R G CY5
-
-# Batch process with recursive search
-lmtools split_channels ./data/ --recursive --sequence R G CY5 --verbose
+lmtools split-channels multi_channel.tif --sequence DAPI GFP mCherry
+lmtools split-channels input_dir/ --recursive --sequence DAPI GFP mCherry
 ```
-### Generating Segmentation Masks from QuPath
 
-### If the image data required transform use:
-####
+### Transform and Split
+
+For images requiring dimension transformation:
+
 ```python
-from lmtools import transform_and_split
+from lmtools.io import transform_and_split
 
-# Specify that channel axis is 0 (first dimension)
+# Transform from (C, Z, Y, X) to (C, X, Y, Z)
 output_files = transform_and_split(
-    "your_image.tif",
+    "image.tif",
     channel_axis=0,
-    channel_names=["Channel1", "Channel2"]
-)
-```
-####
-```bash
-lmtools transform_and_split your_image.tif --channel-axis 0 --sequence Channel1 Channel2
-# Transpose from (C, Z, Y, X) to (C, X, Y, Z)
-lmtools transform_and_split image.tif --transpose 0 3 2 1
-# Normalization: Optionally normalize each channel's intensity to the 0-1 range
-lmtools transform_and_split image.tif --normalize
-# Batch Processing: Process multiple files with the same setting
-lmtools transform_and_split input_directory/ --output output_directory/ --channel-axis 0 --sequence Ch1 Ch2 --recursive
-```
-
-
-#### As a Python package
-
-```python
-from lmtools import generate_segmentation_mask
-
-# Generate masks from QuPath GeoJSON annotations
-success = generate_segmentation_mask(
-    geojson_path="annotations.geojson",
-    output_dir="output_masks",
-    image_width=1024,
-    image_height=768,
-    inner_holes=True,
-    downsample_factor=2
-)
-
-if success:
-    print("Masks generated successfully!")
-```
-
-#### From the command line
-
-```bash
-# Generate masks with inner holes and 2x downsampling
-lmtools generate_mask annotations.geojson output_masks 1024 768 --inner_holes --downsample_factor 2
-```
-
-### Extracting Masks from Cellpose Output
-
-#### As a Python package
-
-```python
-from lmtools import maskExtract
-
-# Extract the mask from a Cellpose output file
-mask = maskExtract(
-    file_path="cellpose_output.npy",
-    output_path="extracted_mask.npy"
+    transpose_axes=[0, 3, 2, 1],
+    channel_names=["Ch1", "Ch2"]
 )
 ```
 
-#### From the command line
-
 ```bash
-# Extract mask from Cellpose output
-lmtools extract_mask --file_path cellpose_output.npy --output_path extracted_mask.npy
+lmtools transform-and-split image.tif --channel-axis 0 --transpose 0 3 2 1
 ```
 
-### Analyzing Segmentation Results
+---
 
-#### As a Python package
+## Segmentation Tools
+
+### Basic Segmentation
 
 ```python
-from lmtools import analyze_segmentation, summarize_segmentation
+from lmtools.seg import basic_segmentation
 
-# Analyze a segmentation mask
-results = analyze_segmentation(
-    mask="segmentation_mask.npy",
-    compute_object_stats=True,
-    min_size=10  # Ignore objects smaller than 10 pixels
-)
-
-# Print a human-readable summary
-summary = summarize_segmentation(results, print_summary=True)
-
-# Access specific information
-num_objects = results['num_objects']
-total_area = results['total_mask_area']
-object_areas = results['object_stats']['area'].tolist()  # List of all object areas
-```
-
-#### From the command line
-
-```bash
-# Basic analysis
-lmtools analyze_segmentation segmentation_mask.npy
-
-# Skip small objects and save results to JSON
-lmtools analyze_segmentation segmentation_mask.npy --min-size 10 --output results.json
-
-# Don't compute per-object statistics (faster for large masks)
-lmtools analyze_segmentation segmentation_mask.npy --no-stats
-```
-
-### Getting Bounding Boxes
-
-#### As a Python package
-
-```python
-from lmtools import get_bounding_boxes
-
-# Get all bounding boxes in a mask
-all_boxes = get_bounding_boxes('segmentation_mask.npy', return_format='coords')
-# Returns: {1: [y_min, x_min, y_max, x_max], 2: [...], ...}
-
-# Get bounding box for a specific object (label ID 5)
-box = get_bounding_boxes('segmentation_mask.npy', label_id=5, return_format='coords')
-# Returns: [y_min, x_min, y_max, x_max]
-
-# Get bounding boxes as slice objects (useful for cropping)
-slices = get_bounding_boxes('segmentation_mask.npy', return_format='slices')
-# Use with NumPy: mask[slices[0]] gives you the first labeled object
-```
-
-#### From the command line
-
-```bash
-# Get all bounding boxes and save to JSON
-lmtools analyze_segmentation segmentation_mask.npy --bbox --output boxes.json
-
-# Get bounding box for a specific label
-lmtools analyze_segmentation segmentation_mask.npy --bbox --label 5
-```
-
-### Running Cellpose Segmentation Pipeline
-
-#### As a Python package
-
-```python
-from lmtools import run_pipeline
-
-# Run segmentation with a config file
-output_files = run_pipeline("cellpose_config.yaml")
-
-# Process the results
-print(f"Generated {len(output_files)} mask files")
-```
-
-#### From the command line
-
-```bash
-# Basic usage with config file
-lmtools cellpose_segment cellpose_config.yaml
-
-# Enable verbose logging
-lmtools cellpose_segment cellpose_config.yaml --verbose
-```
-
-### Basic segmentation
-
-#### As a package
-```python
-from lmtools import threshold_segment, watershed_segment, region_growing_segment
-
-# Simple thresholding with Otsu's method
-labels = threshold_segment(
+# Threshold segmentation
+mask = basic_segmentation(
     "input.tif",
-    "output.tif",
     method="otsu",
-    fill_holes=True,
-    remove_small_objects=True,
-    min_size=50
+    min_size=50,
+    fill_holes=True
 )
 
-# Watershed segmentation for touching objects
-labels = watershed_segment(
-    "input.tif",
-    "output.tif",
-    threshold_method="otsu",
-    distance_transform=True,
+# Watershed segmentation
+mask = basic_segmentation(
+    "input.tif", 
+    method="watershed",
     min_distance=10
 )
-
-# Region growing for complex textures
-labels = region_growing_segment(
-    "input.tif",
-    "output.tif",
-    seed_method="intensity",
-    num_seeds=100,
-    threshold_method="otsu"
-)
 ```
 
-#### Command line
 ```bash
-# Threshold segmentation using Otsu's method
-lmtools basic_segment threshold input.tif output.tif --method otsu --min-size 50
-
-# Adaptive thresholding for uneven illumination
-lmtools basic_segment threshold input.tif output.tif --method adaptive --block-size 51
-
-# Watershed segmentation for separating touching objects
-lmtools basic_segment watershed input.tif output.tif --min-distance 15
-
-# Region growing with SLIC superpixels
-lmtools basic_segment region input.tif output.tif --num-seeds 200 --compactness 0.05
+lmtools basic-segment threshold input.tif output.tif --method otsu --min-size 50
+lmtools basic-segment watershed input.tif output.tif --min-distance 15
 ```
-### Intensity filter
-#### Package usage
+
+### Cellpose Segmentation
+
 ```python
-from lmtools import intensity_filter, visualize_intensity_regions
+from lmtools.seg import cellpose_segmentation
 
-# Basic filtering - remove low-intensity objects
-filtered_mask = intensity_filter(
-    "segmentation.tif",                # Segmentation mask with labeled objects
-    "intensity_image.tif",             # Corresponding intensity image
-    "filtered_segmentation.tif",       # Output path
-    threshold_method='otsu',           # Automatic threshold using Otsu's method
-    plot_histogram=True                # Show histogram of intensities
-)
+# Using config file
+masks = cellpose_segmentation("config.yaml")
 
-# Membrane analysis - focus on cell borders
-filtered_mask = intensity_filter(
-    "segmentation.tif",
-    "intensity_image.tif",
-    "membrane_filtered.tif",
-    region_type='membrane',            # Only consider membrane/border regions
-    membrane_width=3,                  # 3-pixel membrane width
-    threshold=0.25                     # Manual threshold (0-1 scale)
-)
-
-# Visualize the different regions for quality control
-visualization = visualize_intensity_regions(
-    "segmentation.tif",
-    "intensity_image.tif",
-    "region_visualization.png",
-    label_id=5                         # Visualize regions for object #5
+# Direct usage
+mask = cellpose_segmentation(
+    image_path="cells.tif",
+    model_type="cyto",
+    diameter=30,
+    channels=[1, 0]
 )
 ```
 
-#### Command line
-```bash
-# Basic filtering with automatic threshold
-lmtools intensity_filter segmentation.tif intensity_image.tif filtered.tif
-
-# Analyze only membrane regions (3px wide) with manual threshold
-lmtools intensity_filter segmentation.tif intensity_image.tif membrane_filtered.tif \
-    --region membrane --membrane-width 3 --threshold 0.25
-
-# Use percentile-based thresholding (remove bottom 30%)
-lmtools intensity_filter segmentation.tif intensity_image.tif filtered.tif \
-    --threshold-method percentile --percentile 30
-
-# Visualize the analyzed regions
-lmtools intensity_filter segmentation.tif intensity_image.tif filtered.tif \
-    --visualize-regions --vis-output regions.png
-```
-
-### Cell Filtering
-
-#### Package
-```python
-from lmtools import overlap_filter, intensity_channel_filter, multi_channel_filter
-
-# Filter cells based on overlap with another mask (e.g., DAPI nuclei)
-filtered_mask = overlap_filter(
-    "cd45_cells.npy",                 # Segmentation mask to filter
-    "dapi_nuclei.npy",                # Reference mask for overlap
-    "filtered_mask.npy",              # Output path
-    overlap_threshold=0.2,            # Require at least 20% overlap
-    relabel=True                      # Relabel objects sequentially
-)
-
-# Filter cells based on intensity in another channel
-filtered_mask = intensity_channel_filter(
-    "cd45_cells.npy",                 # Segmentation mask to filter
-    "cd11b_intensity.tiff",           # Intensity image for measurement
-    "cd11b_negative_cells.npy",       # Output path
-    threshold_method='otsu',          # Use Otsu's thresholding
-    min_intensity=0.01,               # Remove very low intensity objects
-    plot_histogram=True               # Show intensity histogram
-)
-
-# Complete multi-channel filtering pipeline
-final_mask = multi_channel_filter(
-    "cd45_cells.npy",                 # Primary segmentation mask
-    dapi_mask="dapi_nuclei.npy",      # DAPI segmentation for overlap
-    dapi_image="dapi_intensity.tiff", # DAPI intensity image
-    channel_images={                  # Additional channels to filter on
-        'cd11b': "cd11b_intensity.tiff"
-    },
-    dapi_overlap_threshold=0.2,       # DAPI overlap requirement
-    channel_min_intensities={         # Minimum intensities
-        'dapi': 0.05,
-        'cd11b': 0.01
-    },
-    threshold_method='gmm',           # Use GMM-based thresholding
-    plot_histograms=True              # Generate histograms
-)
-```
-
-## Configuration Files
-
-### Cellpose Configuration Example
-
+Configuration file example:
 ```yaml
-# Model Configuration
 model:
-  # Path to custom model
-  path: "/path/to/your/custom/model"
-  # Alternative: use a built-in pretrained model
-  # pretrained_model: "cyto"
+  pretrained_model: "cyto"
   
-# Input Configuration
 input:
-  # List of directories to process
   directories:
-    - "/path/to/first/directory"
-    - "/path/to/second/directory"
+    - "/path/to/images"
 
-# Segmentation Parameters
 segmentation_params:
-  # Channels to use: [channel_to_segment, optional_nuclear_channel]
-  channels: [1, 0]  # For RGB, use green channel for segmentation
-  
-  # Optional: Override model's default diameter
-  # diameter: 30.0
-  
-  # Parameters for sensitivity adjustment
+  channels: [1, 0]
+  diameter: 30.0
   flow_threshold: 0.4
   cellprob_threshold: 0.0
 
-# Output Configuration
 output:
-  # Skip files containing this pattern
-  exclude_pattern: "_masks"
-  
-  # Suffix to add to output files
   suffix: "_masks"
-  
-  # Clear GPU memory after processing each image
-  clear_cache: true
-
-# Force GPU usage
-force_gpu: false
 ```
 
+### QuPath Integration
 
+Generate masks from QuPath annotations:
 
-## Contributing
+```python
+from lmtools.seg import generate_mask
 
-Contributions are welcome! Please feel free to submit a Pull Request.   
+success = generate_mask(
+    geojson_path="annotations.geojson",
+    output_dir="masks",
+    image_width=1024,
+    image_height=768,
+    downsample_factor=2
+)
+```
 
-Many thanks to **Claude**
+```bash
+lmtools generate-mask annotations.geojson masks 1024 768 --downsample 2
+```
+
+---
+
+## Analysis Tools
+
+### Segmentation Analysis
+
+```python
+from lmtools.seg import analyze_segmentation
+
+# Analyze mask
+results = analyze_segmentation(
+    "segmentation.npy",
+    compute_object_stats=True,
+    min_size=10
+)
+
+print(f"Number of objects: {results['num_objects']}")
+print(f"Average area: {results['avg_area']}")
+```
+
+```bash
+lmtools analyze-segmentation mask.npy --min-size 10 --output results.json
+```
+
+### Intensity Filtering
+
+```python
+from lmtools.seg import intensity_filter
+
+# Filter by intensity
+filtered_mask = intensity_filter(
+    segmentation_mask,
+    intensity_image,
+    threshold_method='otsu',
+    region_type='whole'  # or 'membrane'
+)
+```
+
+```bash
+lmtools intensity-filter mask.tif intensity.tif filtered.tif --method otsu
+```
+
+---
+
+## Tissue Scanner Image Analysis
+
+Specialized workflows for tissue scanner images with multiple fluorescence channels.
+
+### DataPaths System
+
+Automatic file discovery and metadata tracking:
+
+```python
+from lmtools.seg import create_data_paths
+
+# Create data paths with automatic discovery
+data_paths = create_data_paths(
+    base_dir="/path/to/sample",
+    base_name="Sample01",
+    experiment_name="Tissue Analysis",
+    sample_id="S01"
+)
+
+# Load all data
+img_cy5, img_dapi, img_cd11b = data_paths.load_imgs()
+seg_cy5, seg_dapi, seg_cd11b = data_paths.load_segs()
+
+# Save processed results
+data_paths.save_processed_mask(filtered_mask, "filtered_cells")
+data_paths.save_metadata()
+```
+
+### Cell Filtering Pipeline
+
+```python
+from lmtools.seg import filter_by_overlap, intensity_filter, compute_average_intensity
+
+# 1. Filter cells by nuclear overlap
+nuclear_positive = filter_by_overlap(
+    cell_mask,
+    nuclei_mask, 
+    min_overlap_ratio=0.5,
+    data_paths=data_paths,
+    step_name="nuclear_filter"
+)
+
+# 2. Filter by marker intensity
+intensities = compute_average_intensity(
+    nuclear_positive,
+    marker_image,
+    use_donut=True,  # Membrane measurement
+    erode_radius=2
+)
+
+marker_positive = intensity_filter(
+    nuclear_positive,
+    intensities,
+    threshold_method="otsu",
+    data_paths=data_paths,
+    intensity_channel="cd11b"
+)
+```
+
+### Batch Processing Tissue Samples
+
+```python
+import pandas as pd
+
+# Load organized samples
+samples = pd.read_csv('/organized/samples/master_sample_list.csv')
+
+for _, row in samples.iterrows():
+    if not row['has_cy5']:
+        continue
+        
+    # Process each tissue section
+    data_paths = create_data_paths(
+        base_dir=row['sample_dir'],
+        base_name=row['sample_id'],
+        experiment_name="Tissue Scanner Batch"
+    )
+    
+    # Run your analysis pipeline
+    results = process_tissue_section(data_paths)
+    
+    # Results saved automatically with metadata
+```
+
+### Custom Channel Names
+
+For tissue-specific markers:
+
+```python
+data_paths = create_data_paths(
+    base_dir="/data",
+    base_name="TissueSection_001",
+    channel_suffixes={
+        'cy5': '_CD45.tif',
+        'cy3': '_CD68.tif', 
+        'dapi': '_Hoechst.tif',
+        'cd11b': '_CD11b.tif'
+    }
+)
+```
+
+---
+
+## Napari Plugin
+
+Interactive GUI access to all features:
+
+1. Start napari: `napari`
+2. Go to `Plugins` → `lmtools`
+3. Available widgets:
+   - Load ND2 files
+   - Cellpose segmentation
+   - Basic segmentation
+   - Channel splitting
+   - Intensity filtering
+   - Segmentation analysis
+
+---
+
+## Examples
+
+Complete examples in `examples/` directory:
+- `complete_workflow_example.py` - Full pipeline from organization to analysis
+- `immune_cell_processing_example.py` - Tissue scanner image analysis
+- `create_example_file_structure.py` - Data organization examples
+
+---
+
+## Requirements
+
+- Python ≥ 3.7
+- numpy, scipy, pandas
+- scikit-image, scikit-learn
+- opencv-python, matplotlib
+- napari (for GUI)
+- cellpose (optional)
+
+---
+<!-- 
+## License
+
+MIT License
+-->
