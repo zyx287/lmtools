@@ -1,14 +1,14 @@
-"""
+'''
 CLI command to analyze segmentation masks and generate statistics.
-"""
+'''
 import argparse
 from lmtools.seg import analyze_segmentation, summarize_segmentation, get_bounding_boxes
 import json
 
 def add_arguments(parser):
-    """
+    '''
     Add command line arguments for the analyze_segmentation command.
-    """
+    '''
     parser.add_argument(
         "mask_path", 
         type=str, 
@@ -42,9 +42,9 @@ def add_arguments(parser):
     )
 
 def main(args):
-    """
+    '''
     Execute the analyze_segmentation command.
-    """
+    '''
     try:
         if args.bbox:
             # Get bounding boxes

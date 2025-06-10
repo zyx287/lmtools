@@ -17,8 +17,9 @@ from skimage.filters import threshold_otsu
 from skimage.measure import label as sk_label
 from skimage.segmentation import relabel_sequential
 
-from ..compute.morphology import erode_mask_2D_with_ball, generate_2D_donut
-from ..io.metadata_tracking import (
+from lmtools.compute.morphology import erode_mask_2D_with_ball, generate_2D_donut
+from lmtools.compute.intensity_threshold import compute_gmm_component
+from lmtools.io.metadata_tracking import (
     ProcessingStep,
     DataPaths,
     load_segmentation,
@@ -35,9 +36,9 @@ def filter_by_overlap(
     data_paths: Optional[DataPaths] = None,
     step_name: str = "overlap_filter"
 ) -> np.ndarray:
-    """
+    '''
     Keep only objects with overlap(ref_mask)/area >= min_overlap_ratio.
-    """
+    '''
     filtered = seg_mask.copy()
     objects = find_objects(seg_mask)
     labels = np.unique(seg_mask)[1:]
@@ -80,11 +81,11 @@ def size_and_dapi_filter(
     min_overlap_ratio: float,
     min_dapi_intensity: float = None
 ) -> np.ndarray:
-    """
+    '''
     1) Remove objects smaller than `min_size` always.
     2) Remove objects with DAPI-overlap < `min_overlap_ratio`, unless the object's
        mean DAPI intensity >= `min_dapi_intensity` (if provided).
-    """
+    '''
     filtered = seg_mask.copy()
     objects = find_objects(seg_mask)
     labels = np.unique(seg_mask)[1:]
@@ -124,9 +125,9 @@ def compute_average_intensity(
     use_donut: bool=False,
     erode_radius: int=1
 ) -> dict:
-    """
+    '''
     Returns dict {label: mean intensity} per object; ring if use_donut.
-    """
+    '''
     avgs = {}
     objs = find_objects(seg_mask)
     labs = np.unique(seg_mask)[1:]
@@ -188,6 +189,121 @@ def intensity_filter(
     
     return filt
 
+def compute_gmm_threshold(
+    intensity_dict: Dict[int, float],
+    n_components: int = 3,
+    exclude_components: int = 1,
+    n_delta: float = 2.0,
+    data_paths: Optional[DataPaths] = None,
+    intensity_channel: Optional[str] = None,
+    step_name: str = "gmm_threshold"
+) -> Tuple[float, Dict[str, Any]]:
+    '''
+    Compute threshold using Gaussian Mixture Model (GMM) on intensity values.
+    
+    Parameters
+    ----------
+    intensity_dict : Dict[int, float]
+        Dictionary mapping cell labels to mean intensities (from compute_average_intensity)
+    n_components : int, default=3
+        Number of GMM components to fit
+    exclude_components : int, default=1
+        Number of lowest components to exclude as noise/background
+    n_delta : float, default=2.0
+        Number of standard deviations to add to the mean of the excluded component
+    data_paths : Optional[DataPaths]
+        DataPaths instance for metadata tracking
+    intensity_channel : Optional[str]
+        Name of the intensity channel being analyzed
+    step_name : str, default="gmm_threshold"
+        Name for this processing step
+    
+    Returns
+    -------
+    threshold : float
+        Computed threshold value (mean + n_delta * std of the highest excluded component)
+    gmm_info : Dict[str, Any]
+        Dictionary containing GMM parameters and statistics
+    '''
+    # Extract intensity values from dictionary
+    intensity_values = np.array(list(intensity_dict.values()))
+    
+    # Fit GMM
+    gmm_model = compute_gmm_component(intensity_values, n_components=n_components)
+    
+    # Get component parameters (means and standard deviations)
+    means = gmm_model.means_.flatten()
+    covariances = gmm_model.covariances_.flatten()
+    stds = np.sqrt(covariances)
+    weights = gmm_model.weights_
+    
+    # Sort components by mean value
+    sorted_indices = np.argsort(means)
+    sorted_means = means[sorted_indices]
+    sorted_stds = stds[sorted_indices]
+    sorted_weights = weights[sorted_indices]
+    
+    # Calculate threshold based on the highest excluded component
+    if exclude_components > 0 and exclude_components <= n_components:
+        # Use the highest excluded component (0-indexed)
+        exclude_idx = exclude_components - 1
+        threshold_mean = sorted_means[exclude_idx]
+        threshold_std = sorted_stds[exclude_idx]
+        threshold = threshold_mean + n_delta * threshold_std
+    else:
+        raise ValueError(f"exclude_components must be between 1 and {n_components}")
+    
+    # Prepare GMM info
+    gmm_info = {
+        "n_components": n_components,
+        "exclude_components": exclude_components,
+        "n_delta": n_delta,
+        "threshold": threshold,
+        "components": []
+    }
+    
+    # Add info for each component
+    for i in range(n_components):
+        idx = sorted_indices[i]
+        component_info = {
+            "component": i + 1,
+            "mean": float(sorted_means[i]),
+            "std": float(sorted_stds[i]),
+            "weight": float(sorted_weights[i]),
+            "excluded": i < exclude_components
+        }
+        gmm_info["components"].append(component_info)
+    
+    # Add threshold calculation details
+    gmm_info["threshold_calculation"] = {
+        "component_used": exclude_components,
+        "mean": float(threshold_mean),
+        "std": float(threshold_std),
+        "formula": f"mean + {n_delta} * std = {threshold_mean:.2f} + {n_delta} * {threshold_std:.2f} = {threshold:.2f}"
+    }
+    
+    # Track in metadata if provided
+    if data_paths:
+        step = ProcessingStep(
+            step_name=step_name,
+            timestamp=datetime.now().isoformat(),
+            parameters={
+                "n_components": n_components,
+                "exclude_components": exclude_components,
+                "n_delta": n_delta,
+                "intensity_channel": intensity_channel,
+                "threshold": float(threshold),
+                "n_cells_analyzed": len(intensity_dict),
+                "gmm_components": gmm_info["components"],
+                "threshold_calculation": gmm_info["threshold_calculation"]
+            },
+            input_data=[f"intensity_dict_{intensity_channel}" if intensity_channel else "intensity_dict"],
+            notes=f"GMM threshold computed: {threshold:.2f} from component {exclude_components} ({threshold_mean:.2f} + {n_delta}*{threshold_std:.2f})"
+        )
+        data_paths.metadata.add_step(step)
+    
+    return threshold, gmm_info
+
 def reassign_labels(mask: np.ndarray) -> np.ndarray:
     '''
     Relabel images based on connectivity (might hugely reduce the label count).
@@ -203,7 +319,7 @@ def relabel_sequential_labels(mask: np.ndarray) -> np.ndarray:
     return nm
 
 def count_cells(mask: np.ndarray) -> int:
-    """
+    '''
     Count the number of unique cell labels in a segmentation mask, excluding background (0).
     This implementation uses find_objects for better performance with large masks.
     Parameters
@@ -214,7 +330,7 @@ def count_cells(mask: np.ndarray) -> int:
     -------
     int
         Count of unique cell labels (excluding background)
-    """
+    '''
     if mask.size == 0 or mask.max() == 0:  # No cells
         return 0
     
@@ -240,12 +356,12 @@ def display_example(
     plt.show()
 
 def plot_dirc_distribution(intensity_dict):
-    """
+    '''
     Plot the distribution of intensity values from a dictionary
     
     Args:
         intensity_dict: Dictionary with intensity values
-    """
+    '''
     # Extract intensity values from the dictionary
     intensity_values = list(intensity_dict.values())
     
@@ -270,16 +386,106 @@ def plot_dirc_distribution(intensity_dict):
     return mean_intensity, median_intensity
 
 
+def visualize_gmm_threshold(
+    intensity_dict: Dict[int, float],
+    gmm_info: Dict[str, Any],
+    threshold: float,
+    bins: int = 100,
+    save_path: Optional[Path] = None
+):
+    '''
+    Visualize GMM components and threshold on intensity distribution.
+    
+    Parameters
+    ----------
+    intensity_dict : Dict[int, float]
+        Dictionary mapping cell labels to mean intensities
+    gmm_info : Dict[str, Any]
+        GMM information from compute_gmm_threshold
+    threshold : float
+        Computed threshold value
+    bins : int, default=100
+        Number of histogram bins
+    save_path : Optional[Path]
+        If provided, save figure to this path
+    '''
+    from scipy.stats import norm
+    
+    # Extract intensity values
+    intensity_values = np.array(list(intensity_dict.values()))
+    
+    # Create figure
+    plt.figure(figsize=(12, 8))
+    
+    # Plot histogram
+    n, bins_edges, _ = plt.hist(intensity_values, bins=bins, density=True, 
+                                alpha=0.6, color='skyblue', edgecolor='black',
+                                label='Data histogram')
+    
+    # Plot individual GMM components
+    x = np.linspace(intensity_values.min(), intensity_values.max(), 1000)
+    colors = ['red', 'green', 'blue', 'orange', 'purple']
+    
+    for i, comp in enumerate(gmm_info['components']):
+        mean = comp['mean']
+        std = comp['std']
+        weight = comp['weight']
+        color = colors[i % len(colors)]
+        
+        # Plot Gaussian curve
+        y = weight * norm.pdf(x, mean, std)
+        label = f'Component {i+1}: μ={mean:.1f}, σ={std:.1f}, w={weight:.2f}'
+        if comp['excluded']:
+            label += ' (excluded)'
+        plt.plot(x, y, color=color, linewidth=2, label=label)
+        
+        # Add vertical line at component mean
+        plt.axvline(mean, color=color, linestyle='--', alpha=0.5)
+    
+    # Plot combined GMM
+    combined_y = np.zeros_like(x)
+    for comp in gmm_info['components']:
+        combined_y += comp['weight'] * norm.pdf(x, comp['mean'], comp['std'])
+    plt.plot(x, combined_y, 'k-', linewidth=2, label='Combined GMM')
+    
+    # Plot threshold
+    plt.axvline(threshold, color='red', linestyle='-', linewidth=2, 
+                label=f'Threshold: {threshold:.1f}')
+    
+    # Add shaded region for excluded cells
+    plt.axvspan(intensity_values.min(), threshold, alpha=0.2, color='red',
+                label='Excluded region')
+    
+    # Labels and title
+    plt.xlabel('Mean Intensity', fontsize=12)
+    plt.ylabel('Probability Density', fontsize=12)
+    plt.title('GMM Analysis of Intensity Distribution', fontsize=14)
+    plt.legend(loc='best')
+    plt.grid(alpha=0.3)
+    
+    # Add text with threshold calculation
+    calc_info = gmm_info['threshold_calculation']
+    text = f"Threshold = {calc_info['formula']}"
+    plt.text(0.02, 0.98, text, transform=plt.gca().transAxes, 
+             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.show()
+
+
 
 # Example usage function
 def example_usage():
-    """
+    '''
     Example of how to use the enhanced DataPaths class with metadata tracking.
     
     Note: Import DataPaths and create_data_paths from lmtools.io.metadata_tracking
-    """
+    '''
     # Import the necessary classes
-    from ..io.metadata_tracking import create_data_paths, ProcessingStep
+    from lmtools.io.metadata_tracking import create_data_paths, ProcessingStep
     
     # Create data paths with metadata
     data_paths = create_data_paths(

@@ -1,6 +1,6 @@
-"""
+'''
 Widget implementations for lmtools napari plugin.
-"""
+'''
 
 from pathlib import Path
 from typing import Optional, List, Tuple, Union
@@ -12,9 +12,9 @@ import napari
 import tempfile
 import yaml
 
-from ..io.channel_splitting import split_channels
-from ..io.image_downsampling import downsample_image
-from ..seg import (
+from lmtools.io.channel_splitting import split_channels
+from lmtools.io.image_downsampling import downsample_image
+from lmtools.seg import (
     run_pipeline,
     threshold_segment,
     watershed_segment,
@@ -34,7 +34,7 @@ def load_nd2_widget(
     nd2_path: Path,
     viewer: napari.Viewer,
 ) -> None:
-    """Load ND2 file into napari viewer."""
+    '''Load ND2 file into napari viewer.'''
     if nd2_path and nd2_path.exists():
         try:
             # Load the ND2 file
@@ -61,7 +61,7 @@ def cellpose_segmentation_widget(
     output_dir: Optional[Path] = None,
     viewer: napari.Viewer = None,
 ) -> LayerDataTuple:
-    """Run Cellpose segmentation on the selected image layer."""
+    '''Run Cellpose segmentation on the selected image layer.'''
     try:
         from cellpose import models
     except ImportError:
@@ -136,7 +136,7 @@ def create_cellpose_config_widget(
     flow_threshold: float = 0.4,
     cellprob_threshold: float = 0.0,
 ) -> None:
-    """Create a Cellpose configuration file."""
+    '''Create a Cellpose configuration file.'''
     config = {
         "directories": [str(directories)],
         "model": {
@@ -179,7 +179,7 @@ def basic_segmentation_widget(
     save_result: bool = False,
     output_path: Optional[Path] = None,
 ) -> LayerDataTuple:
-    """Run basic segmentation on the selected image layer."""
+    '''Run basic segmentation on the selected image layer.'''
     # Update visibility based on method
     if method == "threshold" and threshold_method == "simple":
         # Would need dynamic visibility update here
@@ -230,7 +230,7 @@ def split_channels_widget(
     save_channels: bool = False,
     output_dir: Optional[Path] = None,
 ) -> None:
-    """Split multi-channel image into separate layers."""
+    '''Split multi-channel image into separate layers.'''
     if image.ndim < 3:
         raise ValueError("Image must have at least 3 dimensions")
     
@@ -296,7 +296,7 @@ def intensity_filter_widget(
     save_result: bool = False,
     output_path: Optional[Path] = None,
 ) -> LayerDataTuple:
-    """Filter segmented objects based on intensity criteria."""
+    '''Filter segmented objects based on intensity criteria.'''
     # Prepare threshold values based on method
     if threshold_method == "manual":
         threshold_values = (min_intensity, max_intensity)
@@ -337,7 +337,7 @@ def analyze_segmentation_widget(
     save_results: bool = False,
     output_path: Optional[Path] = None,
 ) -> None:
-    """Analyze segmentation and display results."""
+    '''Analyze segmentation and display results.'''
     # Call the actual analyze_segmentation function
     results = analyze_segmentation(
         segmentation=labels,
@@ -369,7 +369,7 @@ def downsample_widget(
     save_result: bool = False,
     output_path: Optional[Path] = None,
 ) -> LayerDataTuple:
-    """Downsample image by the specified factor."""
+    '''Downsample image by the specified factor.'''
     # Call the actual downsample_image function
     downsampled = downsample_image(
         image=image,
@@ -401,7 +401,7 @@ def generate_mask_widget(
     fill_holes: bool = True,
     viewer: napari.Viewer = None,
 ) -> None:
-    """Generate mask from QuPath GeoJSON annotations."""
+    '''Generate mask from QuPath GeoJSON annotations.'''
     if geojson_path and geojson_path.exists() and output_dir:
         # Call the actual function which saves to disk
         generate_segmentation_mask(

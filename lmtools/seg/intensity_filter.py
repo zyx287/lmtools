@@ -35,7 +35,7 @@ def intensity_filter(
     figure_path: Optional[Union[str, Path]] = None,
     return_measurements: bool = False
 ) -> Union[np.ndarray, Tuple[np.ndarray, pd.DataFrame]]:
-    """
+    '''
     Filter segmented objects based on their intensity in a corresponding image.
     
     Parameters
@@ -72,7 +72,7 @@ def intensity_filter(
     -------
     numpy.ndarray or Tuple[numpy.ndarray, pandas.DataFrame]
         Filtered segmentation mask, and optionally a DataFrame with measurements
-    """
+    '''
     # Load segmentation if path is provided
     if isinstance(segmentation, (str, Path)):
         seg_path = Path(segmentation)
@@ -226,7 +226,7 @@ def visualize_intensity_regions(
     membrane_width: int = 2,
     show_all_regions: bool = True
 ) -> np.ndarray:
-    """
+    '''
     Visualize the different regions used for intensity calculations.
     
     Parameters
@@ -248,7 +248,7 @@ def visualize_intensity_regions(
     -------
     numpy.ndarray
         Visualization image
-    """
+    '''
     # Load segmentation if path is provided
     if isinstance(segmentation, (str, Path)):
         seg_path = Path(segmentation)

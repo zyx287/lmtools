@@ -29,18 +29,18 @@ import tifffile
 
 
 def load_segmentation(path: Path) -> np.ndarray:
-    """Load a .npy segmentation mask."""
+    '''Load a .npy segmentation mask.'''
     return np.load(path, allow_pickle=True)
 
 
 def load_image(path: Path) -> np.ndarray:
-    """Load an image volume or slice (TIFF)."""
+    '''Load an image volume or slice (TIFF).'''
     return tifffile.imread(path)
 
 
 @dataclass
 class ProcessingStep:
-    """Record a single processing step in the pipeline."""
+    '''Record a single processing step in the pipeline.'''
     step_name: str
     timestamp: str
     parameters: Dict[str, Any]
@@ -51,7 +51,7 @@ class ProcessingStep:
 
 @dataclass
 class ImageMetadata:
-    """Metadata for tracking image processing pipeline."""
+    '''Metadata for tracking image processing pipeline.'''
     experiment_name: str
     sample_id: str
     acquisition_date: Optional[str] = None
@@ -63,17 +63,17 @@ class ImageMetadata:
     notes: Optional[str] = None
     
     def add_step(self, step: ProcessingStep):
-        """Add a processing step to the history."""
+        '''Add a processing step to the history.'''
         self.processing_steps.append(step)
     
     def to_json(self, filepath: Path):
-        """Save metadata to JSON file."""
+        '''Save metadata to JSON file.'''
         with open(filepath, 'w') as f:
             json.dump(asdict(self), f, indent=2)
     
     @classmethod
     def from_json(cls, filepath: Path):
-        """Load metadata from JSON file."""
+        '''Load metadata from JSON file.'''
         with open(filepath, 'r') as f:
             data = json.load(f)
         # Convert processing steps back to ProcessingStep objects
@@ -83,9 +83,9 @@ class ImageMetadata:
 
 @dataclass
 class DataPaths:
-    """
+    '''
     Enhanced data paths manager with automatic path discovery and metadata tracking.
-    """
+    '''
     base_dir: Path
     base_name: str
     metadata: ImageMetadata
@@ -115,7 +115,7 @@ class DataPaths:
     _processed_masks: Dict[str, Path] = field(default_factory=dict)
     
     def __post_init__(self):
-        """Initialize paths and create output directory if needed."""
+        '''Initialize paths and create output directory if needed.'''
         self.base_dir = Path(self.base_dir)
         if self.output_dir is None:
             self.output_dir = self.base_dir / 'processed'
@@ -130,7 +130,7 @@ class DataPaths:
             self.metadata.channel_mappings[channel] = f"{self.base_name}{suffix}"
     
     def get_image_path(self, channel: str) -> Path:
-        """Get image path for a specific channel."""
+        '''Get image path for a specific channel.'''
         suffix = self.channel_suffixes.get(channel)
         if suffix is None:
             raise ValueError(f"Unknown channel: {channel}")
@@ -185,7 +185,7 @@ class DataPaths:
         return path
     
     def get_seg_path(self, seg_type: str) -> Path:
-        """Get segmentation path for a specific type."""
+        '''Get segmentation path for a specific type.'''
         suffix = self.seg_suffixes.get(seg_type)
         if suffix is None:
             raise ValueError(f"Unknown segmentation type: {seg_type}")
@@ -231,7 +231,7 @@ class DataPaths:
         return path
     
     def save_processed_mask(self, mask: np.ndarray, name: str, processing_info: Optional[ProcessingStep] = None) -> Path:
-        """Save a processed mask and track it."""
+        '''Save a processed mask and track it.'''
         output_path = self.output_dir / f"{self.base_name}_{name}.npy"
         np.save(output_path, mask)
         
@@ -245,7 +245,7 @@ class DataPaths:
         return output_path
     
     def save_metadata(self, filename: Optional[str] = None):
-        """Save metadata to JSON file."""
+        '''Save metadata to JSON file.'''
         if filename is None:
             filename = f"{self.base_name}_metadata.json"
         
@@ -286,25 +286,25 @@ class DataPaths:
         return self.get_seg_path('qupath_seg')
     
     def load_segs(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
+        '''
         Returns tuple of segmentation masks: (CY5, DAPI, QuPath).
-        """
+        '''
         seg_cy5 = load_segmentation(self.cy5_seg)
         seg_dapi = load_segmentation(self.dapi_seg)
         seg_qupath = load_segmentation(self.qupath_seg)
         return seg_cy5, seg_dapi, seg_qupath
 
     def load_imgs(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
+        '''
         Returns tuple of raw image arrays: (CY5, DAPI, CD11b).
-        """
+        '''
         img_cy5 = load_image(self.cy5_img)
         img_dapi = load_image(self.dapi_img)
         img_cd11b = load_image(self.cd11b_img)
         return img_cy5, img_dapi, img_cd11b
     
     def get_all_paths_dict(self) -> Dict[str, Path]:
-        """Get dictionary of all available paths."""
+        '''Get dictionary of all available paths.'''
         paths = {
             'cy5_img': self.cy5_img,
             'cy3_img': self.cy3_img,
@@ -332,7 +332,7 @@ def create_data_paths(
     seg_dirs: Optional[Dict[str, str]] = None,
     notes: Optional[str] = None
 ) -> DataPaths:
-    """
+    '''
     Convenience function to create a DataPaths instance with metadata.
     
     Parameters
@@ -364,7 +364,7 @@ def create_data_paths(
     -------
     DataPaths
         Configured DataPaths instance
-    """
+    '''
     # Create metadata
     metadata = ImageMetadata(
         experiment_name=experiment_name,
@@ -398,7 +398,7 @@ def create_data_paths_from_organized(
     acquisition_date: Optional[str] = None,
     notes: Optional[str] = None
 ) -> DataPaths:
-    """
+    '''
     Create a DataPaths instance from organize_data output structure.
     
     This helper function automatically configures DataPaths to work with
@@ -435,7 +435,7 @@ def create_data_paths_from_organized(
     >>> # Now you can use it normally
     >>> img_cy5, img_dapi, img_cd11b = data_paths.load_imgs()
     >>> seg_cy5, seg_dapi, seg_qupath = data_paths.load_segs()
-    """
+    '''
     organized_dir = Path(organized_sample_dir)
     
     # Extract sample_id from directory name

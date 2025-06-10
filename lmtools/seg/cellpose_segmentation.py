@@ -22,7 +22,7 @@ from functools import partial
 logger = logging.getLogger(__name__)
 
 def clear_gpu_cache(force: bool = False, gpu_id: Optional[int] = None) -> None:
-    """
+    '''
     Clear GPU cache and run garbage collection
     
     Parameters
@@ -31,7 +31,7 @@ def clear_gpu_cache(force: bool = False, gpu_id: Optional[int] = None) -> None:
         If True, forces synchronization before clearing cache
     gpu_id : int, optional
         Physical GPU ID for logging purposes (actual GPU being cleared depends on CUDA_VISIBLE_DEVICES)
-    """
+    '''
     try:
         if torch.cuda.is_available():
             if force:
@@ -52,14 +52,14 @@ def clear_gpu_cache(force: bool = False, gpu_id: Optional[int] = None) -> None:
         logger.warning(f"Error clearing {gpu_str} cache: {e}")
 
 def check_gpu() -> bool:
-    """
+    '''
     Check if GPU is available for use with cellpose
     
     Returns
     -------
     bool
         True if GPU is available, False otherwise
-    """
+    '''
     try:
         from cellpose import core
         
@@ -88,9 +88,9 @@ def _process_files_on_gpu(
     output_suffix: str = '_masks',
     clear_cache_every_n: int = 5
 ) -> List[str]:
-    """
+    '''
     Helper function to process files on a specific GPU
-    """
+    '''
     try:
         # Set this process to only see the specified physical GPU
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
@@ -149,7 +149,7 @@ def _process_files_on_gpu(
         return []
 
 def load_config(config_path: str) -> Dict:
-    """
+    '''
     Load configuration from YAML file
     
     Parameters
@@ -161,7 +161,7 @@ def load_config(config_path: str) -> Dict:
     -------
     Dict
         Configuration parameters
-    """
+    '''
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
@@ -189,7 +189,7 @@ def process_directory(
     clear_cache: bool = True,
     clear_cache_every_n: int = 5
 ) -> List[str]:
-    """
+    '''
     Process all images in a directory with cellpose
     
     Parameters
@@ -219,7 +219,7 @@ def process_directory(
     -------
     List[str]
         List of paths to the generated mask files
-    """
+    '''
     try:
         from cellpose import io
         
@@ -403,7 +403,7 @@ def process_directory(
         return []
 
 def run_pipeline(config_path: str) -> List[str]:
-    """
+    '''
     Run the cellpose segmentation pipeline using configuration from a YAML file
     
     Parameters
@@ -415,7 +415,7 @@ def run_pipeline(config_path: str) -> List[str]:
     -------
     List[str]
         List of paths to all generated mask files
-    """
+    '''
     # Load configuration
     config = load_config(config_path)
     

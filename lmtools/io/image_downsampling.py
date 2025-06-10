@@ -45,7 +45,7 @@ def downsample_image(
     preserve_range: bool = True,
     library: Literal['auto', 'pillow', 'opencv', 'skimage'] = 'auto'
 ) -> np.ndarray:
-    """
+    '''
     Downsample a TIFF image using various algorithms
     
     Parameters
@@ -88,7 +88,7 @@ def downsample_image(
         If the method or library is not supported
     ImportError
         If the requested library is not available
-    """
+    '''
     # Convert paths to Path objects for easier handling
     image_path = Path(image_path)
     if output_path is not None:
@@ -277,7 +277,7 @@ def batch_downsample(
     library: str = 'auto',
     recursive: bool = False
 ) -> int:
-    """
+    '''
     Batch downsample multiple TIFF images in a directory
     
     Parameters
@@ -303,7 +303,7 @@ def batch_downsample(
     -------
     int
         Number of images successfully processed
-    """
+    '''
     # Convert to Path objects
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)

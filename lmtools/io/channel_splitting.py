@@ -22,7 +22,7 @@ def split_channels(
     channel_names: Optional[List[str]] = None,
     suffix_separator: str = "_"
 ) -> Dict[str, Path]:
-    """
+    '''
     Split a multi-channel image into separate single-channel images.
     
     Parameters
@@ -48,7 +48,7 @@ def split_channels(
         If the image is not multi-channel or if channel_names length doesn't match
     FileNotFoundError
         If the input file doesn't exist
-    """
+    '''
     # Convert to Path
     image_path = Path(image_path)
     
@@ -146,7 +146,7 @@ def batch_split_channels(
     suffix_separator: str = "_",
     recursive: bool = False
 ) -> int:
-    """
+    '''
     Split channels for multiple images in a directory
     
     Parameters
@@ -168,7 +168,7 @@ def batch_split_channels(
     -------
     int
         Number of images successfully processed
-    """
+    '''
     # Convert to Path objects
     input_dir = Path(input_dir)
     

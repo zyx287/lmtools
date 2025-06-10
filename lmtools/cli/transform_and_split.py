@@ -1,6 +1,6 @@
-"""
+'''
 CLI command to transform and split unusual multi-dimensional images.
-"""
+'''
 import logging
 from pathlib import Path
 from lmtools.io.dimension_transform import transform_and_split, batch_transform_and_split
@@ -8,9 +8,9 @@ from lmtools.io.dimension_transform import transform_and_split, batch_transform_
 logger = logging.getLogger(__name__)
 
 def add_arguments(parser):
-    """
+    '''
     Add command line arguments for the transform_and_split command.
-    """
+    '''
     parser.add_argument(
         "input", 
         type=str, 
@@ -67,9 +67,9 @@ def add_arguments(parser):
     )
 
 def main(args):
-    """
+    '''
     Execute the transform_and_split command.
-    """
+    '''
     # Configure logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(

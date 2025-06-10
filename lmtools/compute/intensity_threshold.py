@@ -11,13 +11,13 @@ from skimage.filters import threshold_otsu
 from sklearn.mixture import GaussianMixture
 
 def compute_otsu_threshold(values: np.ndarray) -> float:
-    """
+    '''
     Compute Otsu's threshold for a given array of values.
     Parameters:
         values (np.ndarray): 1D array of intensity values.
     Returns:
         float: Otsu's threshold value.
-    """
+    '''
     return threshold_otsu(values)
 
 def compute_gmm_component(values: np.ndarray,

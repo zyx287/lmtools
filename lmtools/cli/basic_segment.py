@@ -1,6 +1,6 @@
-"""
+'''
 CLI command for basic segmentation methods.
-"""
+'''
 import logging
 from pathlib import Path
 from lmtools.seg.basic_segmentation import (
@@ -12,9 +12,9 @@ from lmtools.seg.basic_segmentation import (
 logger = logging.getLogger(__name__)
 
 def add_arguments(parser):
-    """
+    '''
     Add command line arguments for the basic_segment command.
-    """
+    '''
     subparsers = parser.add_subparsers(dest="method", help="Segmentation method", required=True)
     
     # Threshold segmentation
@@ -88,9 +88,9 @@ def add_arguments(parser):
 
 
 def main(args):
-    """
+    '''
     Execute the basic_segment command.
-    """
+    '''
     # Configure logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(

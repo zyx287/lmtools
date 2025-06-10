@@ -1,6 +1,6 @@
-"""
+'''
 CLI command for filtering segmentation objects based on intensity.
-"""
+'''
 import logging
 from pathlib import Path
 from lmtools.seg.intensity_filter import intensity_filter, visualize_intensity_regions
@@ -8,9 +8,9 @@ from lmtools.seg.intensity_filter import intensity_filter, visualize_intensity_r
 logger = logging.getLogger(__name__)
 
 def add_arguments(parser):
-    """
+    '''
     Add command line arguments for the intensity_filter command.
-    """
+    '''
     parser.add_argument(
         "segmentation", 
         type=str, 
@@ -90,9 +90,9 @@ def add_arguments(parser):
     )
 
 def main(args):
-    """
+    '''
     Execute the intensity_filter command.
-    """
+    '''
     # Configure logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(

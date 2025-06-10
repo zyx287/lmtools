@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
+'''
 Organize microscopy data for processing.
 
 This module provides command-line interface for the data organization workflow.
-"""
+'''
 
 import argparse
 import logging
@@ -12,7 +12,7 @@ from lmtools.io import organize_data
 
 
 def add_arguments(parser):
-    """Add arguments to the parser for the organize-data command."""
+    '''Add arguments to the parser for the organize-data command.'''
     parser.add_argument(
         '-s', '--source', 
         required=True, 
@@ -47,7 +47,7 @@ def add_arguments(parser):
 
 
 def main(args):
-    """Main CLI function for data organization."""
+    '''Main CLI function for data organization.'''
     # Setup logging
     level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(

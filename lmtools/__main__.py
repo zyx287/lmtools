@@ -1,6 +1,6 @@
-"""
+'''
 Multi-scale analysis of FIB-SEM dataset
-"""
+'''
 import sys
 import logging
 import pkgutil

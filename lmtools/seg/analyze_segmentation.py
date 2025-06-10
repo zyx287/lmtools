@@ -16,7 +16,7 @@ def analyze_segmentation(
     compute_object_stats: bool = True,
     min_size: int = 0
 ) -> Dict:
-    """
+    '''
     Analyze a segmentation mask and compute various statistics
     
     Parameters
@@ -44,7 +44,7 @@ def analyze_segmentation(
             - 'area': object area in pixels
             - 'centroid': object centroid coordinates
             - 'bbox': bounding box (min_row, min_col, max_row, max_col)
-    """
+    '''
     # Load the mask if it's a file path
     if isinstance(mask, str):
         if not os.path.exists(mask):
@@ -139,7 +139,7 @@ def summarize_segmentation(
     results: Dict,
     print_summary: bool = True
 ) -> str:
-    """
+    '''
     Create a human-readable summary of segmentation analysis results
     
     Parameters
@@ -153,7 +153,7 @@ def summarize_segmentation(
     -------
     str
         Summary text
-    """
+    '''
     dimensions = 'x'.join(str(d) for d in results['dimensions'])
     
     summary = [
@@ -186,7 +186,7 @@ def get_bounding_boxes(
     label_id: Optional[int] = None,
     return_format: str = 'slices'
 ) -> Union[List[Optional[Tuple]], Dict[int, Union[Tuple, List[int]]], Tuple, List[int], None]:
-    """
+    '''
     Get bounding boxes for labeled objects in a segmentation mask
     
     Parameters
@@ -223,7 +223,7 @@ def get_bounding_boxes(
         If mask is not a valid segmentation mask or return_format is invalid
     FileNotFoundError
         If mask file path does not exist
-    """
+    '''
     # Load the mask if it's a file path
     if isinstance(mask, str):
         if not os.path.exists(mask):

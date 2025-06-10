@@ -1,12 +1,12 @@
-"""
+'''
 CLI command to generate segmentation masks from QuPath GeoJSON files.
-"""
+'''
 from lmtools.seg import generate_segmentation_mask
 
 def add_arguments(parser):
-    """
+    '''
     Add command line arguments for the generate_mask command.
-    """
+    '''
     parser.add_argument(
         "geojson_path", 
         type=str, 
@@ -40,9 +40,9 @@ def add_arguments(parser):
     )
 
 def main(args):
-    """
+    '''
     Execute the generate_mask command.
-    """
+    '''
     success = generate_segmentation_mask(
         geojson_path=args.geojson_path,
         output_dir=args.output_dir,

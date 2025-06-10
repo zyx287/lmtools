@@ -1,8 +1,8 @@
-"""
+'''
 LM Tools napari plugin
 
 This plugin provides napari widgets for light microscopy image processing and analysis.
-"""
+'''
 
 from ._widgets import (
     load_nd2_widget,

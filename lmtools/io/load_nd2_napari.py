@@ -11,7 +11,7 @@ import numpy as np
 from typing import Optional
 
 def load_nd2(file_path: str) -> Optional[napari.Viewer]:
-    """
+    '''
     Load .nd2 file and display it using Napari
     
     Parameters
@@ -23,7 +23,7 @@ def load_nd2(file_path: str) -> Optional[napari.Viewer]:
     -------
     napari.Viewer or None
         The Napari viewer instance, or None if loading failed
-    """
+    '''
     try:
         with nd2.ND2File(file_path) as nd2_file:
             image_data = nd2_file.asarray()  # Convert to NumPy array

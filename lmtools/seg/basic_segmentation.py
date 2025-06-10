@@ -35,7 +35,7 @@ def threshold_segment(
     connectivity: int = 1,
     return_labels: bool = True
 ) -> np.ndarray:
-    """
+    '''
     Segment image using thresholding techniques
     
     Parameters
@@ -67,7 +67,7 @@ def threshold_segment(
     -------
     numpy.ndarray
         Segmentation result (labeled objects or binary mask)
-    """
+    '''
     # Load image if path is provided
     if isinstance(image, (str, Path)):
         image_path = Path(image)
@@ -199,7 +199,7 @@ def watershed_segment(
     min_size: int = 50,
     fill_holes: bool = True
 ) -> np.ndarray:
-    """
+    '''
     Segment image using the watershed algorithm
     
     Parameters
@@ -231,7 +231,7 @@ def watershed_segment(
     -------
     numpy.ndarray
         Segmentation result (labeled objects)
-    """
+    '''
     # Load image if path is provided
     if isinstance(image, (str, Path)):
         image_path = Path(image)
@@ -364,7 +364,7 @@ def region_growing_segment(
     remove_small_objects: bool = True,
     min_size: int = 50
 ) -> np.ndarray:
-    """
+    '''
     Segment image using region growing (SLIC superpixels or random walker)
     
     Parameters
@@ -392,7 +392,7 @@ def region_growing_segment(
     -------
     numpy.ndarray
         Segmentation result (labeled objects)
-    """
+    '''
     # Load image if path is provided
     if isinstance(image, (str, Path)):
         image_path = Path(image)

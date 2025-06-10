@@ -28,7 +28,7 @@ def overlap_filter(
     overlap_threshold: float = 0.2,
     relabel: bool = False
 ) -> np.ndarray:
-    """
+    '''
     Filter segmentation mask based on overlap with a reference mask.
     
     Parameters
@@ -48,7 +48,7 @@ def overlap_filter(
     -------
     numpy.ndarray
         Filtered segmentation mask
-    """
+    '''
     # Load segmentation mask if path is provided
     if isinstance(segmentation_mask, (str, Path)):
         seg_path = Path(segmentation_mask)
@@ -171,7 +171,7 @@ def intensity_channel_filter(
     figure_path: Optional[Union[str, Path]] = None,
     relabel: bool = False
 ) -> np.ndarray:
-    """
+    '''
     Filter segmentation mask based on average intensity of objects in another channel.
     
     Parameters
@@ -201,7 +201,7 @@ def intensity_channel_filter(
     -------
     numpy.ndarray
         Filtered segmentation mask
-    """
+    '''
     # Load segmentation mask if path is provided
     if isinstance(segmentation_mask, (str, Path)):
         seg_path = Path(segmentation_mask)

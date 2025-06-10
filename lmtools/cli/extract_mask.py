@@ -1,12 +1,12 @@
-"""
+'''
 CLI command to extract masks from Cellpose segmentation outputs.
-"""
+'''
 from lmtools.seg import maskExtract
 
 def add_arguments(parser):
-    """
+    '''
     Add command line arguments for the extract_mask command.
-    """
+    '''
     parser.add_argument(
         "--file_path", 
         type=str, 
@@ -21,9 +21,9 @@ def add_arguments(parser):
     )
 
 def main(args):
-    """
+    '''
     Execute the extract_mask command.
-    """
+    '''
     maskExtract(
         file_path=args.file_path,
         output_path=args.output_path

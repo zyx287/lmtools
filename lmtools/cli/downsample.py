@@ -1,6 +1,6 @@
-"""
+'''
 CLI command to downsample TIFF images.
-"""
+'''
 import logging
 from pathlib import Path
 from lmtools.io.image_downsampling import downsample_image, batch_downsample
@@ -8,9 +8,9 @@ from lmtools.io.image_downsampling import downsample_image, batch_downsample
 logger = logging.getLogger(__name__)
 
 def add_arguments(parser):
-    """
+    '''
     Add command line arguments for the downsample command.
-    """
+    '''
     parser.add_argument(
         "input", 
         type=str, 
@@ -59,9 +59,9 @@ def add_arguments(parser):
     )
 
 def main(args):
-    """
+    '''
     Execute the downsample command.
-    """
+    '''
     # Configure logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(

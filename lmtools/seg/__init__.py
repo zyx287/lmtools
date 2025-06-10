@@ -5,7 +5,7 @@ from .cellpose_segmentation import run_pipeline, check_gpu, load_config, process
 from .basic_segmentation import threshold_segment, watershed_segment, region_growing_segment
 from .intensity_filter import intensity_filter, visualize_intensity_regions
 from .cell_filter import overlap_filter, intensity_channel_filter
-from ..io.metadata_tracking import (
+from lmtools.io.metadata_tracking import (
     DataPaths, 
     ImageMetadata, 
     ProcessingStep,
@@ -17,6 +17,7 @@ from .immune_cell import (
     size_and_dapi_filter,
     compute_average_intensity,
     intensity_filter as immune_intensity_filter,
+    compute_gmm_threshold,
     count_cells,
     relabel_sequential_labels,
     reassign_labels
@@ -48,6 +49,7 @@ __all__ = [
     'size_and_dapi_filter',
     'compute_average_intensity',
     'immune_intensity_filter',
+    'compute_gmm_threshold',
     'count_cells',
     'relabel_sequential_labels',
     'reassign_labels',

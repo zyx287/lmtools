@@ -1,6 +1,6 @@
-"""
+'''
 CLI command to split multi-channel images into separate channel files.
-"""
+'''
 import logging
 from pathlib import Path
 from lmtools.io.channel_splitting import split_channels, batch_split_channels
@@ -8,9 +8,9 @@ from lmtools.io.channel_splitting import split_channels, batch_split_channels
 logger = logging.getLogger(__name__)
 
 def add_arguments(parser):
-    """
+    '''
     Add command line arguments for the split_channels command.
-    """
+    '''
     parser.add_argument(
         "input", 
         type=str, 
@@ -45,9 +45,9 @@ def add_arguments(parser):
     )
 
 def main(args):
-    """
+    '''
     Execute the split_channels command.
-    """
+    '''
     # Configure logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(

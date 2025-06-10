@@ -26,7 +26,7 @@ def transform_and_split(
     normalize: bool = False,
     save_metadata: bool = True
 ) -> Dict[str, Path]:
-    """
+    '''
     Transform and split a multi-dimensional image into separate channel images.
     Handles unusual data layouts where channels might not be in the usual RGB position.
     
@@ -62,7 +62,7 @@ def transform_and_split(
         If channel detection fails or if channel_names length doesn't match
     FileNotFoundError
         If the input file doesn't exist
-    """
+    '''
     # Convert to Path
     image_path = Path(image_path)
     
@@ -220,7 +220,7 @@ def batch_transform_and_split(
     save_metadata: bool = True,
     recursive: bool = False
 ) -> int:
-    """
+    '''
     Transform and split channels for multiple images in a directory
     
     Parameters
@@ -250,7 +250,7 @@ def batch_transform_and_split(
     -------
     int
         Number of images successfully processed
-    """
+    '''
     # Convert to Path objects
     input_dir = Path(input_dir)
     
