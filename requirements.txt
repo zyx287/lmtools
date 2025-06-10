@@ -1,0 +1,27 @@
+# Core dependencies for lmtools
+numpy
+zarr==2.18.2
+nd2
+napari
+napari-plugin-engine
+magicgui
+opencv-python
+pillow
+scipy
+pandas
+pyyaml
+scikit-image
+scikit-learn
+matplotlib
+tifffile
+
+# Optional dependencies for cellpose functionality
+# Uncomment if using cellpose features:
+# cellpose
+# torch
+
+# Development dependencies
+# Uncomment for development:
+# flake8
+# pytest
+# mypy

@@ -18,6 +18,8 @@ if __name__ == "__main__":
             "pandas",
             "pyyaml",
             "scikit-image",
+            "scikit-learn",
+            "matplotlib",
             "tifffile",
         ],
         extras_require={
