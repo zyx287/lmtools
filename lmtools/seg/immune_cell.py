@@ -12,7 +12,7 @@ import numpy as np
 import tifffile
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 from dataclasses import dataclass, field, asdict
 
 from scipy.ndimage import binary_erosion, find_objects
@@ -39,7 +39,7 @@ class ProcessingStep:
     """Record a single processing step in the pipeline."""
     step_name: str
     timestamp: str
-    parameters: Dict[str, any]
+    parameters: Dict[str, Any]
     input_data: List[str]
     output_data: Optional[str] = None
     notes: Optional[str] = None
@@ -102,6 +102,10 @@ class DataPaths:
         'qupath_seg': '_qupath_mask.npy'
     })
     
+    # Channel-specific directories (optional)
+    channel_dirs: Optional[Dict[str, str]] = None
+    seg_dirs: Optional[Dict[str, str]] = None
+    
     # Processed output paths
     output_dir: Optional[Path] = None
     _processed_masks: Dict[str, Path] = field(default_factory=dict)
@@ -127,21 +131,52 @@ class DataPaths:
         if suffix is None:
             raise ValueError(f"Unknown channel: {channel}")
         
-        path = self.base_dir / f"{self.base_name}{suffix}"
+        # Check if channel-specific directory is defined
+        if self.channel_dirs and channel in self.channel_dirs:
+            channel_dir = self.base_dir / self.channel_dirs[channel]
+            path = channel_dir / f"{self.base_name}{suffix}"
+        else:
+            path = self.base_dir / f"{self.base_name}{suffix}"
+            
         if not path.exists():
             # Try alternative naming patterns
+            search_dirs = []
+            if self.channel_dirs and channel in self.channel_dirs:
+                search_dirs.append(self.base_dir / self.channel_dirs[channel])
+            else:
+                search_dirs.append(self.base_dir)
+                
             alt_patterns = [
                 f"{self.base_name}_{channel.upper()}.tif",
+                f"{self.base_name}_{channel.upper()}.tiff",
                 f"{self.base_name}-{channel.upper()}.tif",
-                f"{channel.upper()}_{self.base_name}.tif"
+                f"{self.base_name}-{channel.upper()}.tiff",
+                f"{channel.upper()}_{self.base_name}.tif",
+                f"{channel.upper()}_{self.base_name}.tiff"
             ]
-            for pattern in alt_patterns:
-                alt_path = self.base_dir / pattern
-                if alt_path.exists():
-                    path = alt_path
+            
+            found = False
+            for search_dir in search_dirs:
+                for pattern in alt_patterns:
+                    alt_path = search_dir / pattern
+                    if alt_path.exists():
+                        path = alt_path
+                        found = True
+                        break
+                if found:
                     break
-            else:
-                raise FileNotFoundError(f"Could not find {channel} image with base name {self.base_name}")
+            
+            if not found:
+                # Build list of all searched paths for error message
+                searched_paths = [str(path)]  # Original path
+                for search_dir in search_dirs:
+                    for pattern in alt_patterns:
+                        searched_paths.append(str(search_dir / pattern))
+                
+                error_msg = (f"Could not find {channel} image with base name '{self.base_name}'\n"
+                           f"Searched in the following locations:\n" + 
+                           "\n".join(f"  - {p}" for p in searched_paths))
+                raise FileNotFoundError(error_msg)
         
         return path
     
@@ -151,17 +186,41 @@ class DataPaths:
         if suffix is None:
             raise ValueError(f"Unknown segmentation type: {seg_type}")
         
-        path = self.base_dir / f"{self.base_name}{suffix}"
+        # Check if seg-specific directory is defined
+        if self.seg_dirs and seg_type in self.seg_dirs:
+            seg_dir = self.base_dir / self.seg_dirs[seg_type]
+            path = seg_dir / f"{self.base_name}{suffix}"
+        else:
+            path = self.base_dir / f"{self.base_name}{suffix}"
+            
         if not path.exists():
-            # Try without base name for some seg types
-            if seg_type == 'qupath_seg':
-                alt_path = self.base_dir / 'qupath_mask.npy'
-                if alt_path.exists():
-                    path = alt_path
-                else:
-                    raise FileNotFoundError(f"Could not find {seg_type} with base name {self.base_name}")
+            # Try alternative locations
+            search_dirs = []
+            if self.seg_dirs and seg_type in self.seg_dirs:
+                search_dirs.append(self.base_dir / self.seg_dirs[seg_type])
             else:
-                raise FileNotFoundError(f"Could not find {seg_type} with base name {self.base_name}")
+                search_dirs.append(self.base_dir)
+                
+            # Try without base name for some seg types
+            searched_paths = [str(path)]  # Original path
+            
+            if seg_type == 'qupath_seg':
+                for search_dir in search_dirs:
+                    alt_path = search_dir / 'qupath_mask.npy'
+                    searched_paths.append(str(alt_path))
+                    if alt_path.exists():
+                        path = alt_path
+                        break
+                else:
+                    error_msg = (f"Could not find {seg_type} with base name '{self.base_name}'\n"
+                               f"Searched in the following locations:\n" + 
+                               "\n".join(f"  - {p}" for p in searched_paths))
+                    raise FileNotFoundError(error_msg)
+            else:
+                error_msg = (f"Could not find {seg_type} with base name '{self.base_name}'\n"
+                           f"Searched in the following locations:\n" + 
+                           "\n".join(f"  - {p}" for p in searched_paths))
+                raise FileNotFoundError(error_msg)
         
         # Track segmentation source
         self.metadata.segmentation_sources[seg_type] = str(path)
@@ -255,8 +314,6 @@ class DataPaths:
         paths.update({f'processed_{k}': v for k, v in self._processed_masks.items()})
         return paths
 
-def compute_statistics():
-    pass
 
 def filter_by_overlap(
     seg_mask: np.ndarray,
@@ -280,7 +337,7 @@ def filter_by_overlap(
         region = (seg_mask[slc]==lab)
         overlap = (region & (ref_mask[slc]>0)).sum()
         area = region.sum()
-        if overlap/area < min_overlap_ratio:
+        if area > 0 and overlap/area < min_overlap_ratio:
             filtered[slc][region] = 0
             removed_count += 1
     
@@ -486,6 +543,8 @@ def create_data_paths(
     output_dir: Optional[Union[str, Path]] = None,
     channel_suffixes: Optional[Dict[str, str]] = None,
     seg_suffixes: Optional[Dict[str, str]] = None,
+    channel_dirs: Optional[Dict[str, str]] = None,
+    seg_dirs: Optional[Dict[str, str]] = None,
     notes: Optional[str] = None
 ) -> DataPaths:
     """
@@ -496,7 +555,7 @@ def create_data_paths(
     base_dir : str or Path
         Base directory containing the image and segmentation files
     base_name : str
-        Base name for files (e.g., "Sample01" for files like "Sample01_CY5.tif")
+        Base name for files (e.g., "Sample01" or "Slide 8 of 1_Region 001")
     experiment_name : str
         Name of the experiment
     sample_id : str
@@ -509,6 +568,10 @@ def create_data_paths(
         Custom channel suffixes mapping
     seg_suffixes : dict, optional
         Custom segmentation suffixes mapping
+    channel_dirs : dict, optional
+        Channel-specific subdirectories (e.g., {'cy5': 'raw_images/CY5'})
+    seg_dirs : dict, optional
+        Segmentation-specific subdirectories (e.g., {'cy5_seg': 'segmentations/CY5'})
     notes : str, optional
         Additional notes about the experiment
     
@@ -530,7 +593,9 @@ def create_data_paths(
         base_dir=base_dir,
         base_name=base_name,
         metadata=metadata,
-        output_dir=output_dir
+        output_dir=output_dir,
+        channel_dirs=channel_dirs,
+        seg_dirs=seg_dirs
     )
     
     # Update custom suffixes if provided
