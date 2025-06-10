@@ -1,6 +1,52 @@
-Before 2025-04-14 0.0.1
+# CHANGELOG
 
-Add
-1. downsampling in io functions and the corresponding CLI [Committed and pushed]
-2. basic segmentation functions for easy image [Initial commit pushed, optimization ongoing]
-3. intensity filtering, splitting, transforming and slices based segmentation processing [Committed and pushed]
+## [0.2.0] - 2025-01-06
+
+### Added
+- **Data Organization Module** (`lmtools.io.DataOrganizer`)
+  - Two-step workflow for organizing microscopy images
+  - Step 1: Organize by channel for batch cellpose segmentation
+  - Step 2: Reorganize by sample ID with automatic sample tracking
+  - Master sample list generation with pandas DataFrame
+  - Metadata tracking for each sample
+  - CLI command: `lmtools organize-data`
+  
+- **Enhanced DataPaths System** (`lmtools.seg.immune_cell`)
+  - Automatic file discovery based on naming patterns
+  - Comprehensive metadata tracking with `ImageMetadata` class
+  - Processing history tracking with timestamps and parameters
+  - Support for custom channel names and directory structures
+  - JSON export of complete processing provenance
+  
+- **Tissue Scanner Image Analysis**
+  - Specialized workflows for multi-channel fluorescence images
+  - Cell filtering pipelines with overlap and intensity filters
+  - Batch processing support using master sample list
+  - Custom channel naming for tissue-specific markers
+  
+- **New Dependencies**
+  - Added scikit-learn for machine learning features
+  - Added matplotlib for visualization capabilities
+  
+- **Example Scripts**
+  - `complete_workflow_example.py` - Full pipeline demonstration
+  - `immune_cell_processing_example.py` - Tissue analysis workflows
+  - Updated to use new CLI commands and APIs
+
+### Changed
+- Updated all example scripts to use `lmtools` CLI commands
+- Improved package structure with better module organization
+- Enhanced documentation with separate sections for different workflows
+
+### Fixed
+- Import issues in example scripts
+- CLI command integration with main package structure
+
+---
+
+## [0.1.0] - Before 2025-04-14
+
+### Added
+1. Downsampling in io functions and the corresponding CLI
+2. Basic segmentation functions for easy image processing
+3. Intensity filtering, splitting, transforming and slices based segmentation processing
