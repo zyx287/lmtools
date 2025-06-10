@@ -5,15 +5,21 @@ from .cellpose_segmentation import run_pipeline, check_gpu, load_config, process
 from .basic_segmentation import threshold_segment, watershed_segment, region_growing_segment
 from .intensity_filter import intensity_filter, visualize_intensity_regions
 from .cell_filter import overlap_filter, intensity_channel_filter
-from .immune_cell import (
+from ..io.metadata_tracking import (
     DataPaths, 
     ImageMetadata, 
     ProcessingStep,
     create_data_paths,
+    create_data_paths_from_organized
+)
+from .immune_cell import (
     filter_by_overlap as immune_filter_by_overlap,
     size_and_dapi_filter,
     compute_average_intensity,
-    intensity_filter as immune_intensity_filter
+    intensity_filter as immune_intensity_filter,
+    count_cells,
+    relabel_sequential_labels,
+    reassign_labels
 )
 
 __all__ = [
@@ -37,8 +43,12 @@ __all__ = [
     'ImageMetadata',
     'ProcessingStep',
     'create_data_paths',
+    'create_data_paths_from_organized',
     'immune_filter_by_overlap',
     'size_and_dapi_filter',
     'compute_average_intensity',
     'immune_intensity_filter',
+    'count_cells',
+    'relabel_sequential_labels',
+    'reassign_labels',
 ]

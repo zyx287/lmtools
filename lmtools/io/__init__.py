@@ -8,6 +8,15 @@ from .image_downsampling import downsample_image, batch_downsample
 from .channel_splitting import split_channels, batch_split_channels
 from .dimension_transform import transform_and_split, batch_transform_and_split
 from .data_organizer import DataOrganizer, organize_data
+from .metadata_tracking import (
+    ProcessingStep,
+    ImageMetadata,
+    DataPaths,
+    create_data_paths,
+    create_data_paths_from_organized,
+    load_segmentation,
+    load_image
+)
 
 __all__ = [
     'load_nd2',
@@ -18,5 +27,12 @@ __all__ = [
     'transform_and_split',
     'batch_transform_and_split',
     'DataOrganizer',
-    'organize_data'
+    'organize_data',
+    'ProcessingStep',
+    'ImageMetadata',
+    'DataPaths',
+    'create_data_paths',
+    'create_data_paths_from_organized',
+    'load_segmentation',
+    'load_image'
 ]
