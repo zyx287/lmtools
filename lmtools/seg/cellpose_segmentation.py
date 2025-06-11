@@ -127,7 +127,9 @@ def _process_files_on_gpu(
                     cellprob_threshold=seg_params['cellprob_threshold'],
                 )
                 
-                output_path = f"{file}{output_suffix}.npy"
+                # Create output path by removing extension first
+                base_path = os.path.splitext(file)[0]
+                output_path = f"{base_path}{output_suffix}.npy"
                 np.save(output_path, masks)
                 output_files.append(output_path)
                 
@@ -349,8 +351,9 @@ def process_directory(
                         cellprob_threshold=cellprob_threshold,
                     )
                     
-                    # Create output file path
-                    output_path = f"{file}{output_suffix}.npy"
+                    # Create output file path by removing extension first
+                    base_path = os.path.splitext(file)[0]
+                    output_path = f"{base_path}{output_suffix}.npy"
                     
                     # Save masks
                     np.save(output_path, masks)

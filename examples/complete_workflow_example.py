@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+'''
 Complete Data Organization and Processing Workflow Example
 =========================================================
 
@@ -10,7 +10,7 @@ This example demonstrates the complete workflow:
 4. Process immune cells with filtering
 
 Author: LMTools
-"""
+'''
 
 import os
 import subprocess
@@ -21,7 +21,7 @@ from lmtools.seg.immune_cell import process_immune_cells_batch
 
 
 def run_workflow(raw_images_dir: str, output_dir: str):
-    """Run the complete data organization and processing workflow."""
+    '''Run the complete data organization and processing workflow.'''
     
     print("=" * 70)
     print("LMTools Complete Workflow Example")
@@ -159,7 +159,7 @@ def run_workflow(raw_images_dir: str, output_dir: str):
 
 
 def demonstrate_data_loading(sample_dir: str):
-    """Demonstrate how to load and work with organized data."""
+    '''Demonstrate how to load and work with organized data.'''
     
     print("\n" + "-" * 50)
     print("Example: Loading organized data")
@@ -212,14 +212,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Complete workflow example for LMTools",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog='''
 Example usage:
   # Run complete workflow
   python complete_workflow_example.py -r /path/to/raw/images -o /path/to/output
   
   # Just demonstrate data loading
   python complete_workflow_example.py --demo-load /path/to/output/samples/Sample01
-        """
+        '''
     )
     
     parser.add_argument('-r', '--raw-dir', help='Directory with raw images')

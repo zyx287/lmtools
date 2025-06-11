@@ -17,6 +17,12 @@ from .metadata_tracking import (
     load_segmentation,
     load_image
 )
+from .cellpose_output_helper import (
+    standardize_cellpose_masks,
+    standardize_all_channels,
+    check_cellpose_output,
+    prepare_for_step2
+)
 
 __all__ = [
     'load_nd2',
@@ -34,5 +40,9 @@ __all__ = [
     'create_data_paths',
     'create_data_paths_from_organized',
     'load_segmentation',
-    'load_image'
+    'load_image',
+    'standardize_cellpose_masks',
+    'standardize_all_channels',
+    'check_cellpose_output',
+    'prepare_for_step2'
 ]

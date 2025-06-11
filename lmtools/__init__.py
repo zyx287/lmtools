@@ -31,12 +31,13 @@ from lmtools.seg import (
     overlap_filter,
     intensity_channel_filter,
     create_data_paths,
-    filter_by_overlap,
+    immune_filter_by_overlap,
     compute_average_intensity,
     count_cells
 )
 
 __all__ = [
+    # IO functions
     'load_nd2',
     'downsample_image',
     'batch_downsample',
@@ -44,6 +45,9 @@ __all__ = [
     'batch_split_channels',
     'transform_and_split',
     'batch_transform_and_split',
+    'organize_data',
+    'DataOrganizer',
+    # Segmentation functions
     'generate_segmentation_mask',
     'maskExtract',
     'analyze_segmentation',
@@ -57,4 +61,8 @@ __all__ = [
     'visualize_intensity_regions',
     'overlap_filter',
     'intensity_channel_filter',
+    'create_data_paths',
+    'immune_filter_by_overlap',
+    'compute_average_intensity',
+    'count_cells',
 ]
