@@ -75,20 +75,54 @@ def filter_by_overlap(
 
 def size_and_dapi_filter(
     seg_mask: np.ndarray,
-    dapi_mask: np.ndarray,
+    dapi_mask: Optional[np.ndarray],
     dapi_img: np.ndarray,
     min_size: int,
-    min_overlap_ratio: float,
-    min_dapi_intensity: float = None
+    min_overlap_ratio: Optional[float] = None,
+    min_dapi_intensity: Optional[float] = None,
+    data_paths: Optional[DataPaths] = None,
+    step_name: str = "size_and_dapi_filter"
 ) -> np.ndarray:
     '''
+    Filter cells based on size and DAPI signal.
+    
     1) Remove objects smaller than `min_size` always.
-    2) Remove objects with DAPI-overlap < `min_overlap_ratio`, unless the object's
-       mean DAPI intensity >= `min_dapi_intensity` (if provided).
+    2) If dapi_mask is provided and min_overlap_ratio is set:
+       Remove objects with DAPI-overlap < `min_overlap_ratio`
+    3) If min_dapi_intensity is set:
+       Remove objects with mean DAPI intensity < `min_dapi_intensity`
+    
+    Parameters
+    ----------
+    seg_mask : np.ndarray
+        Segmentation mask to filter
+    dapi_mask : np.ndarray or None
+        DAPI segmentation mask (optional)
+    dapi_img : np.ndarray
+        DAPI intensity image
+    min_size : int
+        Minimum object size in pixels
+    min_overlap_ratio : float, optional
+        Minimum overlap with DAPI mask (only used if dapi_mask provided)
+    min_dapi_intensity : float, optional
+        Minimum mean DAPI intensity
+    data_paths : DataPaths, optional
+        For metadata tracking
+    step_name : str
+        Name for processing step
+        
+    Returns
+    -------
+    np.ndarray
+        Filtered segmentation mask
     '''
     filtered = seg_mask.copy()
     objects = find_objects(seg_mask)
     labels = np.unique(seg_mask)[1:]
+    
+    removed_size = 0
+    removed_overlap = 0
+    removed_intensity = 0
 
     for lab in labels:
         slc = objects[lab - 1]
@@ -97,25 +131,52 @@ def size_and_dapi_filter(
         region = (seg_mask[slc] == lab)
         size = region.sum()
 
-        # always enforce min_size
+        # Always enforce min_size
         if size < min_size:
             filtered[slc][region] = 0
+            removed_size += 1
             continue
 
-        # compute overlap ratio
-        overlap = (region & (dapi_mask[slc] > 0)).sum()
-        overlap_ratio = overlap / size if size > 0 else 0.0
+        # Check overlap ratio if DAPI mask is provided
+        if dapi_mask is not None and min_overlap_ratio is not None:
+            overlap = (region & (dapi_mask[slc] > 0)).sum()
+            overlap_ratio = overlap / size if size > 0 else 0.0
+            
+            if overlap_ratio < min_overlap_ratio:
+                filtered[slc][region] = 0
+                removed_overlap += 1
+                continue
 
-        # compute mean DAPI intensity if threshold is set
-        mean_intensity = None
+        # Check mean DAPI intensity if threshold is set
         if min_dapi_intensity is not None:
             pix = dapi_img[slc][region]
             mean_intensity = pix.mean() if pix.size > 0 else 0.0
-
-        # remove by overlap ratio unless intensity safeguard applies
-        if overlap_ratio < min_overlap_ratio:
-            if min_dapi_intensity is None or mean_intensity < min_dapi_intensity:
+            
+            if mean_intensity < min_dapi_intensity:
                 filtered[slc][region] = 0
+                removed_intensity += 1
+                continue
+    
+    # Track processing if data_paths provided
+    if data_paths:
+        step = ProcessingStep(
+            step_name=step_name,
+            timestamp=datetime.now().isoformat(),
+            parameters={
+                "min_size": min_size,
+                "min_overlap_ratio": min_overlap_ratio,
+                "min_dapi_intensity": min_dapi_intensity,
+                "has_dapi_mask": dapi_mask is not None,
+                "removed_by_size": removed_size,
+                "removed_by_overlap": removed_overlap,
+                "removed_by_intensity": removed_intensity,
+                "total_removed": removed_size + removed_overlap + removed_intensity,
+                "remaining_objects": len(labels) - removed_size - removed_overlap - removed_intensity
+            },
+            input_data=["segmentation_mask", "dapi_image"],
+            notes=f"Filtered by size ({removed_size}), overlap ({removed_overlap}), intensity ({removed_intensity})"
+        )
+        data_paths.metadata.add_step(step)
 
     return filtered
 
@@ -498,7 +559,7 @@ def example_usage():
     )
     
     # Load images and segmentations
-    img_cy5, img_dapi, img_cd11b = data_paths.load_imgs()
+    img_cy5, img_dapi, img_cy3 = data_paths.load_imgs()
     seg_cy5, seg_dapi, seg_qupath = data_paths.load_segs()
     
     # Process with overlap filter
@@ -524,17 +585,17 @@ def example_usage():
     )
     
     # Compute intensities and filter
-    avg_cd11b = compute_average_intensity(filtered_cy5, img_cd11b, use_donut=True)
+    avg_cy3 = compute_average_intensity(filtered_cy5, img_cy3, use_donut=True)
     
     # Apply intensity filter
     final_mask = intensity_filter(
         filtered_cy5,
-        avg_cd11b,
+        avg_cy3,
         upper_thresh=1000,
         lower_thresh=100,
         data_paths=data_paths,
-        intensity_channel="cd11b",
-        step_name="cd11b_intensity_filter"
+        intensity_channel="cy3",
+        step_name="cy3_intensity_filter"
     )
     
     # Save final result and metadata

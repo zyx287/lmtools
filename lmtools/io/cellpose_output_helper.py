@@ -297,4 +297,3 @@ def prepare_for_step2(
     except Exception as e:
         logger.error(f"Error preparing for step 2: {e}")
         return False
-'''

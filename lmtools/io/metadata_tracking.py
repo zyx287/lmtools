@@ -94,8 +94,7 @@ class DataPaths:
     channel_suffixes: Dict[str, str] = field(default_factory=lambda: {
         'cy5': '_CY5.tif',
         'cy3': '_CY3.tif',
-        'dapi': '_DAPI.tif',
-        'cd11b': '_CD11b.tif'  # Can be customized
+        'dapi': '_DAPI.tif'
     })
     
     # Segmentation suffixes
@@ -244,6 +243,26 @@ class DataPaths:
         
         return output_path
     
+    def load_processed_mask(self, name: str) -> np.ndarray:
+        '''Load a previously saved processed mask by name.'''
+        if name not in self._processed_masks:
+            available = list(self._processed_masks.keys())
+            raise ValueError(f"Processed mask '{name}' not found. Available: {available}")
+        
+        return load_segmentation(self._processed_masks[name])
+    
+    def get_latest_mask(self, base_name: str = "cy5") -> np.ndarray:
+        '''Get the most recently processed mask for a given base name.'''
+        # Find all masks that contain the base_name
+        matching_masks = [name for name in self._processed_masks.keys() if base_name in name]
+        
+        if not matching_masks:
+            raise ValueError(f"No processed masks found containing '{base_name}'")
+        
+        # Return the last one (assumes they were saved in order)
+        latest_name = matching_masks[-1]
+        return self.load_processed_mask(latest_name)
+    
     def save_metadata(self, filename: Optional[str] = None):
         '''Save metadata to JSON file.'''
         if filename is None:
@@ -266,8 +285,14 @@ class DataPaths:
         return self.get_image_path('dapi')
     
     @property
+    def cy3_img(self) -> Path:
+        return self.get_image_path('cy3')
+    
+    # Backward compatibility alias
+    @property
     def cd11b_img(self) -> Path:
-        return self.get_image_path('cd11b')
+        '''Deprecated: Use cy3_img instead. CD11b is a marker, not a channel.'''
+        return self.get_image_path('cy3')
     
     @property
     def cy5_seg(self) -> Path:
@@ -285,37 +310,117 @@ class DataPaths:
     def qupath_seg(self) -> Path:
         return self.get_seg_path('qupath_seg')
     
-    def load_segs(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def load_segs(self, seg_types: Optional[List[str]] = None) -> Tuple[np.ndarray, ...]:
         '''
-        Returns tuple of segmentation masks: (CY5, DAPI, QuPath).
+        Returns tuple of segmentation masks in specified order.
+        
+        Parameters
+        ----------
+        seg_types : List[str], optional
+            List of segmentation types to load in desired order.
+            Options: 'cy5', 'cy3', 'dapi', 'qupath'
+            Default: ['cy5', 'dapi', 'qupath']
+            
+        Returns
+        -------
+        tuple of np.ndarray or None
+            Segmentation masks in the order specified, None for missing segmentations
+            
+        Examples
+        --------
+        >>> # Default order
+        >>> seg_cy5, seg_dapi, seg_qupath = data_paths.load_segs()
+        >>> 
+        >>> # Only CY5 and DAPI
+        >>> seg_cy5, seg_dapi = data_paths.load_segs(['cy5', 'dapi'])
+        >>> 
+        >>> # Custom order
+        >>> seg_dapi, seg_cy5 = data_paths.load_segs(['dapi', 'cy5'])
         '''
-        seg_cy5 = load_segmentation(self.cy5_seg)
-        seg_dapi = load_segmentation(self.dapi_seg)
-        seg_qupath = load_segmentation(self.qupath_seg)
-        return seg_cy5, seg_dapi, seg_qupath
+        if seg_types is None:
+            seg_types = ['cy5', 'dapi', 'qupath']  # Default order for backward compatibility
+        
+        segs = []
+        for seg_type in seg_types:
+            try:
+                # Add '_seg' suffix if not present
+                if not seg_type.endswith('_seg') and seg_type != 'qupath':
+                    seg_type = f'{seg_type}_seg'
+                elif seg_type == 'qupath':
+                    seg_type = 'qupath_seg'
+                    
+                seg = load_segmentation(self.get_seg_path(seg_type))
+                segs.append(seg)
+            except FileNotFoundError:
+                segs.append(None)
+        return tuple(segs)
 
-    def load_imgs(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def load_imgs(self, channels: Optional[List[str]] = None) -> Tuple[np.ndarray, ...]:
         '''
-        Returns tuple of raw image arrays: (CY5, DAPI, CD11b).
+        Returns tuple of raw image arrays in specified order.
+        
+        Parameters
+        ----------
+        channels : List[str], optional
+            List of channels to load in desired order. 
+            Options: 'cy5', 'cy3', 'dapi'
+            Default: ['cy5', 'dapi', 'cy3']
+        
+        Returns
+        -------
+        tuple of np.ndarray or None
+            Images in the order specified, None for missing channels
+            
+        Examples
+        --------
+        >>> # Default order
+        >>> img_cy5, img_dapi, img_cy3 = data_paths.load_imgs()
+        >>> 
+        >>> # Custom order
+        >>> img_dapi, img_cy5 = data_paths.load_imgs(['dapi', 'cy5'])
+        >>> 
+        >>> # All available channels
+        >>> imgs = data_paths.load_imgs(['cy5', 'cy3', 'dapi'])
         '''
-        img_cy5 = load_image(self.cy5_img)
-        img_dapi = load_image(self.dapi_img)
-        img_cd11b = load_image(self.cd11b_img)
-        return img_cy5, img_dapi, img_cd11b
+        if channels is None:
+            channels = ['cy5', 'dapi', 'cy3']  # Default order
+        
+        imgs = []
+        for channel in channels:
+            try:
+                img = load_image(self.get_image_path(channel))
+                imgs.append(img)
+            except FileNotFoundError:
+                imgs.append(None)
+        return tuple(imgs)
     
     def get_all_paths_dict(self) -> Dict[str, Path]:
         '''Get dictionary of all available paths.'''
-        paths = {
-            'cy5_img': self.cy5_img,
-            'cy3_img': self.cy3_img,
-            'dapi_img': self.dapi_img,
-            'cd11b_img': self.cd11b_img,
-            'cy5_seg': self.cy5_seg,
-            'dapi_seg': self.dapi_seg,
-            'qupath_seg': self.qupath_seg,
-            'output_dir': self.output_dir
-        }
+        paths = {}
+        
+        # Try to add each path, skip if it doesn't exist
+        # Images
+        for channel in ['cy5', 'cy3', 'dapi']:
+            try:
+                path = self.get_image_path(channel)
+                paths[f'{channel}_img'] = path
+            except FileNotFoundError:
+                pass  # Skip missing channels
+        
+        # Segmentations
+        for seg_type in ['cy5_seg', 'cy3_seg', 'dapi_seg', 'qupath_seg']:
+            try:
+                path = self.get_seg_path(seg_type)
+                paths[seg_type] = path
+            except FileNotFoundError:
+                pass  # Skip missing segmentations
+        
+        # Always include output directory
+        paths['output_dir'] = self.output_dir
+        
+        # Add processed masks
         paths.update({f'processed_{k}': v for k, v in self._processed_masks.items()})
+        
         return paths
 
 
@@ -460,8 +565,7 @@ def create_data_paths_from_organized(
         channel_suffixes={
             'cy5': '_CY5.tiff',   # organize_data uses .tiff
             'cy3': '_CY3.tiff',
-            'dapi': '_DAPI.tiff',
-            'cd11b': '_CD11b.tiff'
+            'dapi': '_DAPI.tiff'
         },
         seg_suffixes={
             'cy5_seg': '_CY5_masks.npy',      # organize_data naming
@@ -472,8 +576,7 @@ def create_data_paths_from_organized(
         channel_dirs={
             'cy5': 'raw_images',
             'cy3': 'raw_images',
-            'dapi': 'raw_images',
-            'cd11b': 'raw_images'
+            'dapi': 'raw_images'
         },
         seg_dirs={
             'cy5_seg': 'segmentations',
