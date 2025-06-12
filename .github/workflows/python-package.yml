@@ -45,3 +45,4 @@ jobs:
         else
           echo "No tests found. Testing package import..."
           python -c "import lmtools; print('Package imported successfully')"
+        fi
