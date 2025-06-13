@@ -5,3 +5,4 @@ __pycache__/
 */*.egg-info
 lmtools.egg-info
 *example*.py
+*.tex
