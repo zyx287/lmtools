@@ -16,6 +16,8 @@ from skimage.morphology import ball
 from skimage.filters import threshold_otsu
 from skimage.measure import label as sk_label
 from skimage.segmentation import relabel_sequential
+import tempfile
+import os
 
 from lmtools.compute.morphology import erode_mask_2D_with_ball, generate_2D_donut
 from lmtools.compute.intensity_threshold import compute_gmm_component
@@ -25,6 +27,7 @@ from lmtools.io.metadata_tracking import (
     load_segmentation,
     load_image
 )
+from lmtools.seg.generate_mask import generate_segmentation_mask
 
 import matplotlib.pyplot as plt
 
@@ -536,6 +539,154 @@ def visualize_gmm_threshold(
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
 
+
+def tissue_mask_filter_by_overlap(
+    seg_mask: np.ndarray,
+    tissue_geojson_path: Optional[Union[str, Path]] = None,
+    img_shape: Optional[Tuple[int, int]] = None,
+    downsample_factor: float = 1.0,
+    erosion_radius: int = 0,
+    min_overlap_ratio: float = 0.99,
+    data_paths: Optional[DataPaths] = None,
+    step_name: str = "tissue_mask_filter"
+) -> np.ndarray:
+    '''Filter segmentation mask by overlap with tissue mask from QuPath GeoJSON.
+    
+    This function loads a QuPath tissue annotation, applies erosion, and filters
+    cells based on their overlap with the tissue region.
+    
+    Args:
+        seg_mask: Segmentation mask to filter
+        tissue_geojson_path: Path to QuPath GeoJSON file. If None, returns original mask
+        img_shape: Image shape (height, width). If None, uses seg_mask shape
+        downsample_factor: Downsample factor for mask generation (default 1.0)
+        erosion_radius: Radius for 2D ball erosion of tissue mask (default 0, no erosion)
+        min_overlap_ratio: Minimum overlap ratio to keep cells (default 0.99)
+        data_paths: DataPaths instance for saving results (optional)
+        step_name: Name for this processing step
+        
+    Returns:
+        Filtered segmentation mask (same shape as input)
+        
+    Example:
+        >>> # Filter cells by tissue mask with erosion
+        >>> filtered_mask = tissue_mask_filter_by_overlap(
+        ...     seg_mask=seg_cy3,
+        ...     tissue_geojson_path="path/to/tissue.geojson",
+        ...     erosion_radius=10,
+        ...     min_overlap_ratio=0.99,
+        ...     data_paths=data_paths
+        ... )
+    '''
+    # If no tissue mask provided, return original mask
+    if tissue_geojson_path is None:
+        print(f"No tissue mask provided, returning original mask")
+        return seg_mask
+    
+    tissue_geojson_path = Path(tissue_geojson_path)
+    if not tissue_geojson_path.exists():
+        print(f"Warning: Tissue mask file not found: {tissue_geojson_path}")
+        print(f"Returning original mask without tissue filtering")
+        return seg_mask
+    
+    # Use seg_mask shape if img_shape not provided
+    if img_shape is None:
+        img_shape = seg_mask.shape
+    
+    # Determine output directory
+    if data_paths is not None:
+        output_dir = data_paths.output_dir / "tissue_masks"
+        output_dir.mkdir(exist_ok=True)
+    else:
+        # Use current directory if no data_paths
+        output_dir = Path(".") / "tissue_masks"
+        output_dir.mkdir(exist_ok=True)
+    
+    # Check if tissue mask already exists
+    base_name = tissue_geojson_path.stem
+    tissue_mask_path = output_dir / f"{base_name}_tissue_mask.npy"
+    
+    if tissue_mask_path.exists() and erosion_radius == 0:
+        print(f"Loading existing tissue mask from {tissue_mask_path}")
+        tissue_mask = np.load(tissue_mask_path)
+        tissue_mask = (tissue_mask > 0).astype(np.uint8)
+    else:
+        # Generate tissue mask from GeoJSON
+        print(f"Generating tissue mask from {tissue_geojson_path.name}...")
+        success = generate_segmentation_mask(
+            geojson_path=str(tissue_geojson_path),
+            output_dir=str(output_dir),
+            image_width=int(img_shape[0]),  # width is first dimension
+            image_height=int(img_shape[1]),
+            inner_holes=True,
+            downsample_factor=downsample_factor
+        )
+        
+        if not success:
+            print(f"Error generating tissue mask, returning original mask")
+            return seg_mask
+        
+        # Load the generated mask
+        tissue_mask = np.load(tissue_mask_path)
+        
+        # Convert to binary (0 or 1)
+        tissue_mask = (tissue_mask > 0).astype(np.uint8)
+    
+    # Apply erosion if requested
+    if erosion_radius > 0:
+        # Check if eroded version exists
+        eroded_mask_path = output_dir / f"{base_name}_tissue_mask_eroded_{erosion_radius}.npy"
+        
+        if eroded_mask_path.exists():
+            print(f"Loading existing eroded tissue mask from {eroded_mask_path}")
+            tissue_mask = np.load(eroded_mask_path)
+        else:
+            print(f"Applying erosion with radius {erosion_radius}...")
+            tissue_mask = erode_mask_2D_with_ball(tissue_mask, erosion_radius)
+            # Save eroded mask for future use
+            np.save(eroded_mask_path, tissue_mask)
+            print(f"Saved eroded tissue mask to {eroded_mask_path}")
+    
+    # Count initial cells
+    initial_count = count_cells(seg_mask)
+    
+    # Apply overlap filter
+    print(f"Filtering cells by tissue overlap (threshold={min_overlap_ratio})...")
+    filtered_mask = filter_by_overlap(
+        seg_mask=seg_mask,
+        ref_mask=tissue_mask,
+        min_overlap_ratio=min_overlap_ratio
+    )
+    
+    # Count filtered cells
+    final_count = count_cells(filtered_mask)
+    
+    print(f"Tissue mask filter: {final_count}/{initial_count} cells kept ({final_count/initial_count*100:.1f}%)")
+    
+    # Save if data_paths provided
+    if data_paths is not None:
+        data_paths.save_processed_mask(
+            mask=filtered_mask,
+            name=f"{step_name}_filtered",
+            processing_info=ProcessingStep(
+                step_name=step_name,
+                timestamp=datetime.now().isoformat(),
+                parameters={
+                    "tissue_geojson": str(tissue_geojson_path),
+                    "erosion_radius": erosion_radius,
+                    "min_overlap_ratio": min_overlap_ratio,
+                    "downsample_factor": downsample_factor,
+                    "input_cells": initial_count,
+                    "output_cells": final_count,
+                    "cells_removed": initial_count - final_count,
+                    "removal_percentage": (initial_count - final_count) / initial_count * 100 if initial_count > 0 else 0
+                },
+                input_data=["segmentation", "tissue_mask"],
+                notes=f"Filtered cells by tissue mask overlap (threshold={min_overlap_ratio}, erosion={erosion_radius}px)"
+            )
+        )
+    
+    return filtered_mask
 
 
 # Example usage function

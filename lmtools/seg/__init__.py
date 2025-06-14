@@ -20,7 +20,8 @@ from .immune_cell import (
     compute_gmm_threshold,
     count_cells,
     relabel_sequential_labels,
-    reassign_labels
+    reassign_labels,
+    tissue_mask_filter_by_overlap
 )
 
 __all__ = [
@@ -53,4 +54,5 @@ __all__ = [
     'count_cells',
     'relabel_sequential_labels',
     'reassign_labels',
+    'tissue_mask_filter_by_overlap',
 ]

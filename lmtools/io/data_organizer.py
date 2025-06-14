@@ -427,12 +427,107 @@ echo "python -c 'from lmtools.io import DataOrganizer; organizer = DataOrganizer
         
         logger.info(f"  Created master_sample_list.csv")
         logger.info(f"  Created sample_ids.txt with {len(master_list)} samples")
+    
+    def organize_tissue_masks(self, qupath_dir: Union[str, Path]) -> pd.DataFrame:
+        '''Step 3: Organize QuPath tissue masks into corresponding sample folders.
+        
+        Expected GeoJSON filename format: "Slide 43 of 1_Region 001_DAPI.geojson"
+        
+        Args:
+            qupath_dir: Directory containing QuPath GeoJSON tissue masks
+            
+        Returns:
+            DataFrame with organization results
+        '''
+        qupath_dir = Path(qupath_dir)
+        samples_dir = self.output_dir / "samples"
+        
+        if not samples_dir.exists():
+            raise ValueError("Run step 2 first to create sample folders")
+        
+        if not qupath_dir.exists():
+            raise ValueError(f"QuPath directory does not exist: {qupath_dir}")
+        
+        mask_records = []
+        
+        # Find all GeoJSON files
+        geojson_files = list(qupath_dir.glob("*.geojson"))
+        logger.info(f"Found {len(geojson_files)} GeoJSON files in {qupath_dir}")
+        
+        for geojson_file in geojson_files:
+            # Parse filename
+            filename = geojson_file.stem
+            parts = filename.split('_')
+            
+            if len(parts) >= 3:
+                # Extract sample ID (e.g., "Slide 43 of 1_Region 001")
+                sample_id = '_'.join(parts[:-1])
+                channel = parts[-1]
+                
+                # Find matching sample folder
+                sample_folder = samples_dir / sample_id
+                if sample_folder.exists():
+                    # Create tissue_masks subfolder
+                    tissue_mask_dir = sample_folder / "tissue_masks"
+                    tissue_mask_dir.mkdir(exist_ok=True)
+                    
+                    # Copy GeoJSON file
+                    dest_path = tissue_mask_dir / geojson_file.name
+                    shutil.copy2(geojson_file, dest_path)
+                    
+                    mask_records.append({
+                        'sample_id': sample_id,
+                        'channel': channel,
+                        'source_file': str(geojson_file),
+                        'destination': str(dest_path),
+                        'file_size': geojson_file.stat().st_size,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    
+                    logger.info(f"Copied tissue mask for {sample_id} ({channel})")
+                else:
+                    logger.warning(f"No sample folder found for {sample_id}")
+                    mask_records.append({
+                        'sample_id': sample_id,
+                        'channel': channel,
+                        'source_file': str(geojson_file),
+                        'destination': None,
+                        'file_size': geojson_file.stat().st_size,
+                        'timestamp': datetime.now().isoformat(),
+                        'status': 'no_sample_folder'
+                    })
+            else:
+                logger.warning(f"Cannot parse filename: {filename}")
+        
+        # Save organization summary
+        mask_df = pd.DataFrame(mask_records)
+        
+        if len(mask_df) > 0:
+            summary_path = self.output_dir / "tissue_mask_organization.csv"
+            mask_df.to_csv(summary_path, index=False)
+            logger.info(f"Saved tissue mask organization summary to {summary_path}")
+            
+            # Print summary
+            successful = mask_df[mask_df['destination'].notna()]
+            logger.info(f"\nTissue Mask Organization Summary:")
+            logger.info(f"  Total GeoJSON files: {len(mask_df)}")
+            logger.info(f"  Successfully organized: {len(successful)}")
+            logger.info(f"  Failed (no matching sample): {len(mask_df) - len(successful)}")
+            
+            if len(successful) > 0:
+                logger.info(f"  Unique samples with masks: {successful['sample_id'].nunique()}")
+                logger.info(f"  Channels found: {sorted(successful['channel'].unique())}")
+        else:
+            logger.warning("No tissue masks were organized")
+        
+        return mask_df
 
 
 def organize_data(source_dir: Union[str, Path], 
                   output_dir: Union[str, Path],
                   step: Optional[int] = None,
-                  include_masks: bool = True) -> Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame]]:
+                  include_masks: bool = True,
+                  qupath_dir: Optional[Union[str, Path]] = None) -> Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame]]:
     '''Organize microscopy data for processing.
     
     This function provides a convenient interface to the DataOrganizer class.
@@ -440,12 +535,14 @@ def organize_data(source_dir: Union[str, Path],
     Args:
         source_dir: Directory containing raw images
         output_dir: Directory for organized output
-        step: Which step to run (1, 2, or None for both)
+        step: Which step to run (1, 2, 3, or None for steps 1&2)
         include_masks: Whether to copy segmentation masks in step 2
+        qupath_dir: Directory containing QuPath GeoJSON tissue masks (for step 3)
         
     Returns:
         If step=1: DataFrame from organize_by_channel
         If step=2: DataFrame from organize_by_sample
+        If step=3: DataFrame from organize_tissue_masks
         If step=None: Tuple of (channel_df, sample_df)
         
     Example:
@@ -454,6 +551,8 @@ def organize_data(source_dir: Union[str, Path],
         >>> channel_df, sample_df = organize_data('/raw/images', '/organized')
         >>> # Run only step 1
         >>> channel_df = organize_data('/raw/images', '/organized', step=1)
+        >>> # Run step 3 to organize tissue masks
+        >>> mask_df = organize_data('/raw/images', '/organized', step=3, qupath_dir='/path/to/geojson')
     '''
     organizer = DataOrganizer(source_dir, output_dir)
     
@@ -461,6 +560,10 @@ def organize_data(source_dir: Union[str, Path],
         return organizer.organize_by_channel()
     elif step == 2:
         return organizer.organize_by_sample(include_masks=include_masks)
+    elif step == 3:
+        if qupath_dir is None:
+            raise ValueError("qupath_dir must be provided for step 3")
+        return organizer.organize_tissue_masks(qupath_dir)
     else:
         # Run both steps
         channel_df = organizer.organize_by_channel()

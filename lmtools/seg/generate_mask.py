@@ -50,7 +50,7 @@ def generate_segmentation_mask(geojson_path:str,
         with open(geojson_path, "r") as f:
             data = json.load(f)
 
-        mask = np.zeros((image_width, image_height), dtype=np.uint8) #255 for white, 0 for black
+        mask = np.zeros((int(image_width*downsample_factor), int(image_height*downsample_factor)), dtype=np.uint8) #255 for white, 0 for black
 
         for feature in data['features']:
             geom = feature['geometry']
@@ -78,31 +78,31 @@ def generate_segmentation_mask(geojson_path:str,
 
         # Save full-resolution mask
         base_name = os.path.splitext(os.path.basename(geojson_path))[0]
-        full_res_path = os.path.join(output_dir, f"{base_name}_mask.npy")
-        np.save(full_res_path, mask)
-        print(f"Saved full-resolution mask: {full_res_path}")
+        downsampled_path = os.path.join(output_dir, f"{base_name}_x{downsample_factor}mask.npy")
+        np.save(downsampled_path, mask)
+        print(f"Saved downsampled mask: {downsampled_path}")
 
         # Downsample the mask
         # Check if we're downsampling or upsampling
         if downsample_factor > 1:
             # Downsampling case
-            new_width = int(image_width / downsample_factor)
-            new_height = int(image_height / downsample_factor)
-            downsampled_mask = cv2.resize(mask, (new_height, new_width), 
+            new_width = int(image_width)
+            new_height = int(image_height)
+            full_res_mask = cv2.resize(mask, (new_height, new_width), 
                          interpolation=cv2.INTER_NEAREST)
         else:
             # Upsampling case (downsample_factor < 1)
-            new_width = int(image_width / downsample_factor)
-            new_height = int(image_height / downsample_factor) 
-            downsampled_mask = cv2.resize(mask, (new_height, new_width),
+            new_width = int(image_width)
+            new_height = int(image_height) 
+            full_res_mask = cv2.resize(mask, (new_height, new_width),
                          interpolation=cv2.INTER_LINEAR)
             # Threshold to ensure binary mask after interpolation
-            downsampled_mask = (downsampled_mask > 127).astype(np.uint8) * 255
+            full_res_mask = (full_res_mask > 127).astype(np.uint8) * 255
 
         # Save downsampled mask
-        downsampled_path = os.path.join(output_dir, f"{base_name}_mask_{downsample_factor}xdown.npy")
-        np.save(downsampled_path, downsampled_mask)
-        print(f"Saved downsampled mask: {downsampled_path}")
+        full_res_path = os.path.join(output_dir, f"{base_name}_tissue_mask.npy")
+        np.save(full_res_path, full_res_mask)
+        print(f"Saved downsampled mask: {full_res_path}")
 
         return True
     

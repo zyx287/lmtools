@@ -394,6 +394,45 @@ class DataPaths:
                 imgs.append(None)
         return tuple(imgs)
     
+    def get_tissue_mask_path(self) -> Optional[Path]:
+        '''Get path to tissue mask GeoJSON file.
+        
+        The tissue mask is typically created from DAPI channel and applies to all channels.
+        Looks for any .geojson file in the tissue_masks folder.
+        
+        Returns
+        -------
+        Path or None
+            Path to GeoJSON file if exists, None otherwise
+        '''
+        # Check if this is an organized sample with tissue_masks folder
+        tissue_mask_dir = self.base_dir / "tissue_masks"
+        if not tissue_mask_dir.exists():
+            return None
+        
+        # Look for any GeoJSON file (usually created from DAPI)
+        geojson_files = list(tissue_mask_dir.glob("*.geojson"))
+        
+        if geojson_files:
+            # If multiple files, prefer one with DAPI in name
+            dapi_files = [f for f in geojson_files if 'DAPI' in f.name.upper()]
+            if dapi_files:
+                return dapi_files[0]
+            # Otherwise return the first one
+            return geojson_files[0]
+        
+        return None
+    
+    def has_tissue_mask(self) -> bool:
+        '''Check if tissue mask exists.
+        
+        Returns
+        -------
+        bool
+            True if tissue mask exists
+        '''
+        return self.get_tissue_mask_path() is not None
+    
     def get_all_paths_dict(self) -> Dict[str, Path]:
         '''Get dictionary of all available paths.'''
         paths = {}
@@ -414,6 +453,11 @@ class DataPaths:
                 paths[seg_type] = path
             except FileNotFoundError:
                 pass  # Skip missing segmentations
+        
+        # Tissue mask (single mask for all channels)
+        tissue_mask_path = self.get_tissue_mask_path()
+        if tissue_mask_path:
+            paths['tissue_mask'] = tissue_mask_path
         
         # Always include output directory
         paths['output_dir'] = self.output_dir
