@@ -31,20 +31,25 @@ def generate_segmentation_mask(geojson_path:str,
                                output_dir:str,
                                image_width:int, image_height:int,
                                inner_holes:bool=True,
-                               downsample_factor:float=0.1)->bool:
+                               downsample_factor:float=0.1,
+                               erosion_radius_before_upscaling:int=None)->bool:
     '''
-    Read QuPath GeoJSON->generate segmentation mask->downsampling->saving
+    Read QuPath GeoJSON->generate segmentation mask->erosion(optional)->upscaling->saving
     Parms:
         geojson_path, output_dir: str
           Path to the QuPath .geojson file and directory to save the masks
         image_width, image_height: int
           Width and height of the original image
-        downsample_factor: int
-          Downsample <factor> times
+        downsample_factor: float
+          Downsample factor for initial mask generation
+        inner_holes: bool
+          Whether to include inner holes in the mask
+        erosion_radius_before_upscaling: int, optional
+          If provided, erode the mask at downsampled resolution before upscaling
+          This is much faster than eroding at full resolution
     
     Returns:
-        y: type
-          description
+        bool: True if successful, False if error
     '''
     try:
         with open(geojson_path, "r") as f:
@@ -74,11 +79,24 @@ def generate_segmentation_mask(geojson_path:str,
                         hole_boundary = np.array(hole, np.int32).reshape((-1, 1, 2))
                         cv2.fillPoly(mask, [hole_boundary], color=0)
 
+        # Apply erosion at downsampled resolution if requested
+        if erosion_radius_before_upscaling is not None and erosion_radius_before_upscaling > 0:
+            from skimage.morphology import erosion, disk
+            # Scale erosion radius by downsample factor
+            scaled_radius = int(erosion_radius_before_upscaling * downsample_factor)
+            if scaled_radius > 0:
+                print(f"Applying erosion with radius {scaled_radius} at downsampled resolution...")
+                mask_binary = (mask > 0).astype(np.uint8)
+                mask = erosion(mask_binary, disk(scaled_radius)).astype(np.uint8) * 255
+
         os.makedirs(output_dir, exist_ok=True)
 
-        # Save full-resolution mask
+        # Save downsampled mask (with erosion if applied)
         base_name = os.path.splitext(os.path.basename(geojson_path))[0]
-        downsampled_path = os.path.join(output_dir, f"{base_name}_x{downsample_factor}mask.npy")
+        if erosion_radius_before_upscaling is not None and erosion_radius_before_upscaling > 0:
+            downsampled_path = os.path.join(output_dir, f"{base_name}_x{downsample_factor}mask_eroded{erosion_radius_before_upscaling}.npy")
+        else:
+            downsampled_path = os.path.join(output_dir, f"{base_name}_x{downsample_factor}mask.npy")
         np.save(downsampled_path, mask)
         print(f"Saved downsampled mask: {downsampled_path}")
 
@@ -88,7 +106,7 @@ def generate_segmentation_mask(geojson_path:str,
             # Downsampling case
             new_width = int(image_width)
             new_height = int(image_height)
-            full_res_mask = cv2.resize(mask, (new_height, new_width), 
+            full_res_mask = cv2.resize(mask, (new_height, new_width), #resize input is (height, width)
                          interpolation=cv2.INTER_NEAREST)
         else:
             # Upsampling case (downsample_factor < 1)
@@ -99,10 +117,13 @@ def generate_segmentation_mask(geojson_path:str,
             # Threshold to ensure binary mask after interpolation
             full_res_mask = (full_res_mask > 127).astype(np.uint8) * 255
 
-        # Save downsampled mask
-        full_res_path = os.path.join(output_dir, f"{base_name}_tissue_mask.npy")
+        # Save full resolution mask
+        if erosion_radius_before_upscaling is not None and erosion_radius_before_upscaling > 0:
+            full_res_path = os.path.join(output_dir, f"{base_name}_tissue_mask_eroded{erosion_radius_before_upscaling}.npy")
+        else:
+            full_res_path = os.path.join(output_dir, f"{base_name}_tissue_mask.npy")
         np.save(full_res_path, full_res_mask)
-        print(f"Saved downsampled mask: {full_res_path}")
+        print(f"Saved full resolution mask: {full_res_path}")
 
         return True
     

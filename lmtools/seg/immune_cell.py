@@ -604,22 +604,31 @@ def tissue_mask_filter_by_overlap(
     
     # Check if tissue mask already exists
     base_name = tissue_geojson_path.stem
-    tissue_mask_path = output_dir / f"{base_name}_tissue_mask.npy"
     
-    if tissue_mask_path.exists() and erosion_radius == 0:
+    # Determine which mask file to look for/generate
+    if erosion_radius > 0:
+        tissue_mask_path = output_dir / f"{base_name}_tissue_mask_eroded{erosion_radius}.npy"
+    else:
+        tissue_mask_path = output_dir / f"{base_name}_tissue_mask.npy"
+    
+    if tissue_mask_path.exists():
         print(f"Loading existing tissue mask from {tissue_mask_path}")
         tissue_mask = np.load(tissue_mask_path)
         tissue_mask = (tissue_mask > 0).astype(np.uint8)
     else:
-        # Generate tissue mask from GeoJSON
+        # Generate tissue mask from GeoJSON with erosion during generation (faster)
         print(f"Generating tissue mask from {tissue_geojson_path.name}...")
+        if erosion_radius > 0:
+            print(f"  with erosion radius {erosion_radius} (applied before upscaling)")
+        
         success = generate_segmentation_mask(
             geojson_path=str(tissue_geojson_path),
             output_dir=str(output_dir),
             image_width=int(img_shape[0]),  # width is first dimension
             image_height=int(img_shape[1]),
             inner_holes=True,
-            downsample_factor=downsample_factor
+            downsample_factor=downsample_factor,
+            erosion_radius_before_upscaling=erosion_radius if erosion_radius > 0 else None
         )
         
         if not success:
@@ -631,21 +640,6 @@ def tissue_mask_filter_by_overlap(
         
         # Convert to binary (0 or 1)
         tissue_mask = (tissue_mask > 0).astype(np.uint8)
-    
-    # Apply erosion if requested
-    if erosion_radius > 0:
-        # Check if eroded version exists
-        eroded_mask_path = output_dir / f"{base_name}_tissue_mask_eroded_{erosion_radius}.npy"
-        
-        if eroded_mask_path.exists():
-            print(f"Loading existing eroded tissue mask from {eroded_mask_path}")
-            tissue_mask = np.load(eroded_mask_path)
-        else:
-            print(f"Applying erosion with radius {erosion_radius}...")
-            tissue_mask = erode_mask_2D_with_ball(tissue_mask, erosion_radius)
-            # Save eroded mask for future use
-            np.save(eroded_mask_path, tissue_mask)
-            print(f"Saved eroded tissue mask to {eroded_mask_path}")
     
     # Count initial cells
     initial_count = count_cells(seg_mask)
