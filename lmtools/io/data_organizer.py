@@ -103,9 +103,9 @@ class DataOrganizer:
                 sample_id, channel = self.extract_sample_info(file_path.name)
                 
                 if sample_id and channel:
-                    # Copy file to channel directory
+                    # Move file to channel directory
                     dest_path = channel_dirs[channel] / file_path.name
-                    shutil.copy2(file_path, dest_path)
+                    shutil.move(str(file_path), str(dest_path))
                     
                     # Record file info
                     file_info = {
@@ -119,7 +119,7 @@ class DataOrganizer:
                     processed_files.append(file_info)
                     self.sample_info.append(file_info)
                     
-                    logger.debug(f"Copied {file_path.name} -> {channel}/{file_path.name}")
+                    logger.debug(f"Moved {file_path.name} -> {channel}/{file_path.name}")
         
         # Create sample summary DataFrame
         df = pd.DataFrame(processed_files)
@@ -270,9 +270,9 @@ class DataOrganizer:
                 channel_path = Path(file_info['channel_path'])
                 
                 if channel_path.exists():
-                    # Copy raw image
+                    # Move raw image
                     dest_raw = raw_dir / f"{sample_id}_{channel}.tiff"
-                    shutil.copy2(channel_path, dest_raw)
+                    shutil.move(str(channel_path), str(dest_raw))
                     sample_data['channels'].append(channel)
                     sample_data['raw_images'][channel] = str(dest_raw)
                     
@@ -282,7 +282,7 @@ class DataOrganizer:
                         if mask_key in all_masks:
                             mask_path = all_masks[mask_key]
                             dest_mask = seg_dir / f"{sample_id}_{channel}_masks.npy"
-                            shutil.copy2(mask_path, dest_mask)
+                            shutil.move(str(mask_path), str(dest_mask))
                             sample_data['segmentations'][channel] = str(dest_mask)
             
             # Save sample metadata
@@ -471,9 +471,9 @@ echo "python -c 'from lmtools.io import DataOrganizer; organizer = DataOrganizer
                     tissue_mask_dir = sample_folder / "tissue_masks"
                     tissue_mask_dir.mkdir(exist_ok=True)
                     
-                    # Copy GeoJSON file
+                    # Move GeoJSON file
                     dest_path = tissue_mask_dir / geojson_file.name
-                    shutil.copy2(geojson_file, dest_path)
+                    shutil.move(str(geojson_file), str(dest_path))
                     
                     mask_records.append({
                         'sample_id': sample_id,
@@ -484,7 +484,7 @@ echo "python -c 'from lmtools.io import DataOrganizer; organizer = DataOrganizer
                         'timestamp': datetime.now().isoformat()
                     })
                     
-                    logger.info(f"Copied tissue mask for {sample_id} ({channel})")
+                    logger.info(f"Moved tissue mask for {sample_id} ({channel})")
                 else:
                     logger.warning(f"No sample folder found for {sample_id}")
                     mask_records.append({
