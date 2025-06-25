@@ -18,9 +18,65 @@ from datetime import datetime
 import json
 from typing import Dict, List, Optional, Tuple, Union
 import logging
+import errno
 
 # Setup module logger
 logger = logging.getLogger(__name__)
+
+
+def robust_move(src: Union[str, Path], dst: Union[str, Path]) -> None:
+    '''Robust file move operation with atomic rename fallback.
+    
+    This function attempts to use os.rename() for fast, atomic moves on the same
+    filesystem, but falls back to shutil.move() for cross-filesystem moves.
+    All errors are surfaced rather than failing silently.
+    
+    Args:
+        src: Source file path
+        dst: Destination file path
+        
+    Raises:
+        OSError: If the move operation fails
+        FileNotFoundError: If source file doesn't exist
+        PermissionError: If insufficient permissions
+        FileExistsError: If destination already exists and can't be overwritten
+    '''
+    src_path = Path(src)
+    dst_path = Path(dst)
+    
+    # Validate source exists
+    if not src_path.exists():
+        raise FileNotFoundError(f"Source file does not exist: {src}")
+    
+    # Create destination directory if it doesn't exist
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        # Try atomic rename first (fastest, works on same filesystem)
+        os.rename(str(src_path), str(dst_path))
+        logger.debug(f"Atomic move: {src} -> {dst}")
+        
+    except OSError as e:
+        # If rename fails due to cross-filesystem move, fall back to copy+delete
+        if e.errno == errno.EXDEV:  # Invalid cross-device link
+            logger.debug(f"Cross-filesystem move detected, falling back to copy+delete: {src} -> {dst}")
+            try:
+                # Use shutil.move for cross-filesystem moves
+                shutil.move(str(src_path), str(dst_path))
+                logger.debug(f"Cross-filesystem move completed: {src} -> {dst}")
+            except Exception as move_error:
+                raise OSError(f"Failed to move {src} to {dst}: {move_error}") from move_error
+        else:
+            # Re-raise other OS errors with context
+            raise OSError(f"Failed to move {src} to {dst}: {e}") from e
+    
+    # Verify the move was successful
+    if not dst_path.exists():
+        raise OSError(f"Move operation appeared to succeed but destination file does not exist: {dst}")
+    
+    if src_path.exists():
+        logger.warning(f"Source file still exists after move operation: {src}")
+        # This could indicate a partial failure in cross-filesystem moves
 
 
 class DataOrganizer:
@@ -103,9 +159,12 @@ class DataOrganizer:
                 sample_id, channel = self.extract_sample_info(file_path.name)
                 
                 if sample_id and channel:
+                    # Get file size before moving
+                    file_size = file_path.stat().st_size
+                    
                     # Move file to channel directory
                     dest_path = channel_dirs[channel] / file_path.name
-                    shutil.move(str(file_path), str(dest_path))
+                    robust_move(file_path, dest_path)
                     
                     # Record file info
                     file_info = {
@@ -113,7 +172,7 @@ class DataOrganizer:
                         'channel': channel,
                         'original_path': str(file_path),
                         'channel_path': str(dest_path),
-                        'file_size': file_path.stat().st_size,
+                        'file_size': file_size,
                         'timestamp': datetime.now().isoformat()
                     }
                     processed_files.append(file_info)
@@ -272,7 +331,7 @@ class DataOrganizer:
                 if channel_path.exists():
                     # Move raw image
                     dest_raw = raw_dir / f"{sample_id}_{channel}.tiff"
-                    shutil.move(str(channel_path), str(dest_raw))
+                    robust_move(channel_path, dest_raw)
                     sample_data['channels'].append(channel)
                     sample_data['raw_images'][channel] = str(dest_raw)
                     
@@ -282,7 +341,7 @@ class DataOrganizer:
                         if mask_key in all_masks:
                             mask_path = all_masks[mask_key]
                             dest_mask = seg_dir / f"{sample_id}_{channel}_masks.npy"
-                            shutil.move(str(mask_path), str(dest_mask))
+                            robust_move(mask_path, dest_mask)
                             sample_data['segmentations'][channel] = str(dest_mask)
             
             # Save sample metadata
@@ -471,16 +530,19 @@ echo "python -c 'from lmtools.io import DataOrganizer; organizer = DataOrganizer
                     tissue_mask_dir = sample_folder / "tissue_masks"
                     tissue_mask_dir.mkdir(exist_ok=True)
                     
+                    # Get file size before moving
+                    file_size = geojson_file.stat().st_size
+                    
                     # Move GeoJSON file
                     dest_path = tissue_mask_dir / geojson_file.name
-                    shutil.move(str(geojson_file), str(dest_path))
+                    robust_move(geojson_file, dest_path)
                     
                     mask_records.append({
                         'sample_id': sample_id,
                         'channel': channel,
                         'source_file': str(geojson_file),
                         'destination': str(dest_path),
-                        'file_size': geojson_file.stat().st_size,
+                        'file_size': file_size,
                         'timestamp': datetime.now().isoformat()
                     })
                     
