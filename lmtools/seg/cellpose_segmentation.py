@@ -11,12 +11,9 @@ import torch
 import logging
 from typing import List, Dict, Tuple, Union, Optional, Any
 import yaml
-from glob import glob
-from pathlib import Path
 import gc
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
-from functools import partial
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -30,10 +27,17 @@ def clear_gpu_cache(force: bool = False, gpu_id: Optional[int] = None) -> None:
     force : bool
         If True, forces synchronization before clearing cache
     gpu_id : int, optional
-        Physical GPU ID for logging purposes (actual GPU being cleared depends on CUDA_VISIBLE_DEVICES)
+        GPU ID to clear cache for. If None, clears current device
     '''
     try:
         if torch.cuda.is_available():
+            # Save current device
+            current_device = torch.cuda.current_device()
+            
+            # Switch to target device if specified
+            if gpu_id is not None and gpu_id < torch.cuda.device_count():
+                torch.cuda.set_device(gpu_id)
+            
             if force:
                 torch.cuda.synchronize()
             torch.cuda.empty_cache()
@@ -41,12 +45,12 @@ def clear_gpu_cache(force: bool = False, gpu_id: Optional[int] = None) -> None:
             gc.collect()
             
             # Log which GPU's cache was cleared
+            cleared_device = gpu_id if gpu_id is not None else current_device
+            logger.info(f"GPU {cleared_device} cache cleared successfully")
+            
+            # Restore original device if we switched
             if gpu_id is not None:
-                logger.info(f"GPU {gpu_id} cache cleared successfully")
-            else:
-                # When gpu_id not provided, show current visible devices
-                visible_devices = os.environ.get('CUDA_VISIBLE_DEVICES', 'all')
-                logger.info(f"GPU cache cleared successfully (visible devices: {visible_devices})")
+                torch.cuda.set_device(current_device)
     except Exception as e:
         gpu_str = f"GPU {gpu_id}" if gpu_id is not None else "GPU"
         logger.warning(f"Error clearing {gpu_str} cache: {e}")
@@ -61,6 +65,12 @@ def check_gpu() -> bool:
         True if GPU is available, False otherwise
     '''
     try:
+        # Check if CUDA_VISIBLE_DEVICES is already set
+        visible_devices = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+        if visible_devices:
+            logger.info(f"CUDA_VISIBLE_DEVICES is set to: {visible_devices}")
+        
+        # Try to import and check GPU availability
         from cellpose import core
         
         # Clear cache before checking
@@ -69,11 +79,18 @@ def check_gpu() -> bool:
         use_GPU = core.use_gpu()
         logger.info(f'GPU activated: {["NO", "YES"][use_GPU]}')
         
-        if use_GPU:
-            # Log GPU memory status
-            gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
-            allocated = torch.cuda.memory_allocated(0) / 1024**3
-            logger.info(f'GPU memory: {allocated:.2f}/{gpu_mem:.2f} GB allocated')
+        if use_GPU and torch.cuda.is_available():
+            try:
+                # Log GPU memory status
+                gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                allocated = torch.cuda.memory_allocated(0) / 1024**3
+                logger.info(f'GPU memory: {allocated:.2f}/{gpu_mem:.2f} GB allocated')
+            except RuntimeError as e:
+                logger.warning(f"Error accessing GPU properties: {e}")
+                # Try to reinitialize CUDA
+                if "CUDA unknown error" in str(e):
+                    logger.warning("CUDA initialization error detected. This may be due to environment variable changes.")
+                    logger.warning("Consider restarting the Python process or setting CUDA_VISIBLE_DEVICES before importing torch.")
         
         return use_GPU
     except Exception as e:
@@ -92,19 +109,28 @@ def _process_files_on_gpu(
     Helper function to process files on a specific GPU
     '''
     try:
-        # Set this process to only see the specified physical GPU
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-        torch.cuda.set_device(0)  # 0 is the only visible device in this context
-        # All GPU operations in this process will use physical GPU {gpu_id}
+        from cellpose import models
+        from cellpose import io
         
-        from cellpose import models, io
+        # Set the specific GPU to use (no environment variable manipulation needed)
+        use_gpu = False
+        if torch.cuda.is_available() and gpu_id < torch.cuda.device_count():
+            torch.cuda.set_device(gpu_id)
+            logger.info(f"Process assigned to GPU {gpu_id}")
+            use_gpu = True
+        else:
+            logger.warning(f"GPU {gpu_id} not available, falling back to CPU")
+            use_gpu = False
         
-        # Clear cache on the assigned GPU (physical GPU {gpu_id})
-        clear_gpu_cache(gpu_id=gpu_id)
+        # Clear cache on the assigned GPU if using GPU
+        if use_gpu:
+            clear_gpu_cache(gpu_id=gpu_id)
         
+        # Create model using the specific GPU or CPU
         model = models.CellposeModel(
-            gpu=True,
-            pretrained_model=model_params.get('pretrained_model', 'cpsam')
+            gpu=use_gpu,
+            pretrained_model=model_params.get('pretrained_model', 'cpsam'),
+            device=torch.cuda.current_device() if use_gpu else None
         )
         
         output_files = []
@@ -244,7 +270,37 @@ def process_directory(
             
             # Determine actual number of GPUs to use
             available_gpus = torch.cuda.device_count()
+            
+            # Handle zero GPU case
+            if available_gpus == 0:
+                logger.warning("No CUDA devices detected. Falling back to single CPU processing.")
+                # Process on CPU by calling the worker function directly
+                model_params = {
+                    'pretrained_model': pretrained_model,
+                    'path': model_config.get('path')
+                }
+                seg_params = {
+                    'channels': channels,
+                    'diameter': diameter,
+                    'flow_threshold': flow_threshold,
+                    'cellprob_threshold': cellprob_threshold
+                }
+                # Call worker with gpu_id=0 (it will detect no GPUs and use CPU)
+                return _process_files_on_gpu(
+                    gpu_id=0,
+                    files=files,
+                    model_params=model_params,
+                    seg_params=seg_params,
+                    output_suffix=output_suffix,
+                    clear_cache_every_n=clear_cache_every_n
+                )
+            
             actual_gpus = min(num_gpus, available_gpus, len(files))
+            
+            # Guard against zero workers
+            if actual_gpus == 0:
+                logger.error("Cannot create executor with 0 workers")
+                return []
             
             if actual_gpus < num_gpus:
                 logger.warning(f"Requested {num_gpus} GPUs, but only {actual_gpus} available/needed")
