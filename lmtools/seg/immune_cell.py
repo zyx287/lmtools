@@ -19,7 +19,12 @@ from skimage.segmentation import relabel_sequential
 import tempfile
 import os
 
-from lmtools.compute.morphology import erode_mask_2D_with_ball, generate_2D_donut
+from lmtools.compute.morphology import (
+    erode_mask_2D_with_ball, 
+    generate_2D_donut,
+    erode_binary_mask_2D,
+    generate_binary_donut_2D
+)
 from lmtools.compute.intensity_threshold import compute_gmm_component
 from lmtools.io.metadata_tracking import (
     ProcessingStep,
@@ -201,7 +206,8 @@ def compute_average_intensity(
             continue
         region = (seg_mask[slc]==lab)
         if use_donut:
-            region_ring = generate_2D_donut(region, erode_radius)
+            # Use fast binary donut for single object regions
+            region_ring = generate_binary_donut_2D(region, erode_radius)
             pix = intensity_img[slc][region_ring]
         else:
             pix = intensity_img[slc][region]

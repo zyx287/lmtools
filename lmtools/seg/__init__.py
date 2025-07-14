@@ -23,6 +23,10 @@ from .immune_cell import (
     reassign_labels,
     tissue_mask_filter_by_overlap
 )
+from .visualize import (
+    generate_cell_density_heatmap,
+    generate_cell_distribution_plot
+)
 
 __all__ = [
     'generate_segmentation_mask',
@@ -55,4 +59,6 @@ __all__ = [
     'relabel_sequential_labels',
     'reassign_labels',
     'tissue_mask_filter_by_overlap',
+    'generate_cell_density_heatmap',
+    'generate_cell_distribution_plot',
 ]

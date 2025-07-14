@@ -81,13 +81,14 @@ def generate_segmentation_mask(geojson_path:str,
 
         # Apply erosion at downsampled resolution if requested
         if erosion_radius_before_upscaling is not None and erosion_radius_before_upscaling > 0:
-            from skimage.morphology import erosion, disk
+            from lmtools.compute.morphology import erode_binary_mask_2D
             # Scale erosion radius by downsample factor
             scaled_radius = int(erosion_radius_before_upscaling * downsample_factor)
             if scaled_radius > 0:
                 print(f"Applying erosion with radius {scaled_radius} at downsampled resolution...")
-                mask_binary = (mask > 0).astype(np.uint8)
-                mask = erosion(mask_binary, disk(scaled_radius)).astype(np.uint8) * 255
+                mask_binary = (mask > 0)
+                eroded_mask = erode_binary_mask_2D(mask_binary, scaled_radius)
+                mask = eroded_mask.astype(np.uint8) * 255
 
         os.makedirs(output_dir, exist_ok=True)
 
