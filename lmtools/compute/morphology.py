@@ -9,11 +9,22 @@ import numpy as np
 
 from skimage.morphology import erosion, ball, disk
 from scipy import ndimage
+from scipy.ndimage import distance_transform_edt
 try:
     import cv2
     HAS_OPENCV = True
 except ImportError:
     HAS_OPENCV = False
+
+# GPU support with CuPy
+try:
+    import cupy as cp
+    from cupyx.scipy import ndimage as cp_ndimage
+    HAS_GPU = True
+except ImportError:
+    HAS_GPU = False
+    cp = None
+    cp_ndimage = None
 
 def erode_binary_mask_2D(mask: np.ndarray,
                          radius: int) -> np.ndarray:
@@ -171,3 +182,243 @@ def generate_2D_donut(mask: np.ndarray,
         donut_mask = mask.copy()
         donut_mask[eroded_mask > 0] = 0
         return donut_mask
+
+
+def erode_mask_2D_with_dt(mask: np.ndarray, radius: int) -> np.ndarray:
+    '''
+    Fast erosion for 2D masks using Euclidean distance transform.
+    
+    Parameters:
+    -----------
+    mask : np.ndarray
+        Input mask (will be binarized with mask > 0)
+    radius : int
+        Erosion radius in pixels
+    
+    Returns:
+    --------
+    np.ndarray (bool)
+        Eroded binary mask where distance from edge > radius
+    
+    Note:
+    -----
+    This method is often faster than morphological erosion for large radii.
+    It computes the distance transform and thresholds at the specified radius.
+    '''
+    # Binarize the mask
+    binary_mask = mask > 0
+    
+    if radius == 0:
+        return binary_mask
+    
+    # Compute Euclidean distance transform
+    dist_transform = distance_transform_edt(binary_mask)
+    
+    # Return mask where distance from edge is greater than radius
+    return dist_transform > radius
+    # Usage: eroded = erode_mask_2D_with_dt(tissue_mask, erosion_radius=10)
+
+
+def generate_2D_donut_dt(mask: np.ndarray, radius: int) -> np.ndarray:
+    '''
+    Generate a 2D donut mask using distance transform erosion.
+    
+    Parameters:
+    -----------
+    mask : np.ndarray
+        Input mask (will be binarized with mask > 0)
+    radius : int
+        Radius of erosion for the inner boundary
+    
+    Returns:
+    --------
+    np.ndarray (bool)
+        Binary donut mask (True in the shell region)
+    
+    Note:
+    -----
+    Returns the "shell" between the original mask and the eroded mask.
+    This is the region within 'radius' pixels of the mask boundary.
+    '''
+    # Get original binary mask
+    binary_mask = mask > 0
+    
+    if radius == 0:
+        return np.zeros_like(binary_mask, dtype=bool)
+    
+    # Get eroded mask using distance transform
+    eroded_mask = erode_mask_2D_with_dt(mask, radius)
+    
+    # Return the shell (original minus eroded)
+    return binary_mask & ~eroded_mask
+    # Usage: donut = generate_2D_donut_dt(tissue_mask, radius=10)
+
+
+def check_gpu_available() -> bool:
+    '''
+    Check if GPU acceleration is available for morphological operations.
+    
+    Returns:
+    --------
+    bool
+        True if CuPy is installed and GPU is available
+    '''
+    if not HAS_GPU:
+        return False
+    
+    try:
+        # Try to create a small array on GPU
+        test = cp.array([1, 2, 3])
+        del test
+        return True
+    except Exception:
+        return False
+
+
+def erode_mask_2D_gpu(mask: np.ndarray, radius: int) -> np.ndarray:
+    '''
+    GPU-accelerated erosion for 2D masks using CuPy.
+    
+    Parameters:
+    -----------
+    mask : np.ndarray
+        Input mask (will be binarized with mask > 0)
+    radius : int
+        Erosion radius in pixels
+    
+    Returns:
+    --------
+    np.ndarray (bool)
+        Eroded binary mask
+    
+    Note:
+    -----
+    Requires CuPy and CUDA-capable GPU. Falls back to EDT if GPU unavailable.
+    For best performance, use with large images and radii.
+    '''
+    if not check_gpu_available():
+        # Fallback to EDT method
+        return erode_mask_2D_with_dt(mask, radius)
+    
+    # Binarize the mask
+    binary_mask = mask > 0
+    
+    if radius == 0:
+        return binary_mask
+    
+    try:
+        # Transfer to GPU
+        gpu_mask = cp.asarray(binary_mask)
+        
+        # Create structuring element on GPU
+        y, x = cp.ogrid[-radius:radius+1, -radius:radius+1]
+        struct_elem = (x**2 + y**2 <= radius**2)
+        
+        # Perform erosion on GPU
+        gpu_eroded = cp_ndimage.binary_erosion(gpu_mask, structure=struct_elem)
+        
+        # Transfer back to CPU
+        result = cp.asnumpy(gpu_eroded)
+        
+        # Clean up GPU memory
+        del gpu_mask, gpu_eroded, struct_elem
+        cp.get_default_memory_pool().free_all_blocks()
+        
+        return result
+        
+    except Exception as e:
+        # Fallback to EDT on error
+        print(f"GPU erosion failed: {e}, falling back to EDT")
+        return erode_mask_2D_with_dt(mask, radius)
+    # Usage: eroded = erode_mask_2D_gpu(tissue_mask, radius=100)
+
+
+def erode_mask_2D_gpu_edt(mask: np.ndarray, radius: int) -> np.ndarray:
+    '''
+    GPU-accelerated erosion using Euclidean distance transform with CuPy.
+    
+    Parameters:
+    -----------
+    mask : np.ndarray
+        Input mask (will be binarized with mask > 0)
+    radius : int
+        Erosion radius in pixels
+    
+    Returns:
+    --------
+    np.ndarray (bool)
+        Eroded binary mask where distance from edge > radius
+    
+    Note:
+    -----
+    Combines the speed of EDT with GPU acceleration for maximum performance.
+    Particularly effective for very large images.
+    '''
+    if not check_gpu_available():
+        # Fallback to CPU EDT
+        return erode_mask_2D_with_dt(mask, radius)
+    
+    # Binarize the mask
+    binary_mask = mask > 0
+    
+    if radius == 0:
+        return binary_mask
+    
+    try:
+        # Transfer to GPU
+        gpu_mask = cp.asarray(binary_mask)
+        
+        # Compute EDT on GPU
+        gpu_dist = cp_ndimage.distance_transform_edt(gpu_mask)
+        
+        # Threshold on GPU
+        gpu_result = gpu_dist > radius
+        
+        # Transfer back to CPU
+        result = cp.asnumpy(gpu_result)
+        
+        # Clean up GPU memory
+        del gpu_mask, gpu_dist, gpu_result
+        cp.get_default_memory_pool().free_all_blocks()
+        
+        return result
+        
+    except Exception as e:
+        # Fallback to CPU EDT on error
+        print(f"GPU EDT failed: {e}, falling back to CPU EDT")
+        return erode_mask_2D_with_dt(mask, radius)
+    # Usage: eroded = erode_mask_2D_gpu_edt(tissue_mask, radius=100)
+
+
+def generate_2D_donut_gpu(mask: np.ndarray, radius: int) -> np.ndarray:
+    '''
+    Generate a 2D donut mask using GPU-accelerated erosion.
+    
+    Parameters:
+    -----------
+    mask : np.ndarray
+        Input mask (will be binarized with mask > 0)
+    radius : int
+        Radius of erosion for the inner boundary
+    
+    Returns:
+    --------
+    np.ndarray (bool)
+        Binary donut mask (True in the shell region)
+    
+    Note:
+    -----
+    Uses GPU EDT erosion for maximum speed on large images.
+    '''
+    # Get original binary mask
+    binary_mask = mask > 0
+    
+    if radius == 0:
+        return np.zeros_like(binary_mask, dtype=bool)
+    
+    # Get eroded mask using GPU
+    eroded_mask = erode_mask_2D_gpu_edt(mask, radius)
+    
+    # Return the shell (original minus eroded)
+    return binary_mask & ~eroded_mask
+    # Usage: donut = generate_2D_donut_gpu(tissue_mask, radius=50)
