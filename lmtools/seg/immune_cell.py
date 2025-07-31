@@ -552,6 +552,7 @@ def tissue_mask_filter_by_overlap(
     img_shape: Optional[Tuple[int, int]] = None,
     downsample_factor: float = 1.0,
     erosion_radius: int = 0,
+    erosion_downsample_factor: Optional[float] = None,
     min_overlap_ratio: float = 0.99,
     data_paths: Optional[DataPaths] = None,
     step_name: str = "tissue_mask_filter"
@@ -567,6 +568,8 @@ def tissue_mask_filter_by_overlap(
         img_shape: Image shape (height, width). If None, uses seg_mask shape
         downsample_factor: Downsample factor for mask generation (default 1.0)
         erosion_radius: Radius for 2D ball erosion of tissue mask (default 0, no erosion)
+        erosion_downsample_factor: Separate downsample factor for erosion operation.
+            If provided, tissue mask is downsampled to this factor before erosion.
         min_overlap_ratio: Minimum overlap ratio to keep cells (default 0.99)
         data_paths: DataPaths instance for saving results (optional)
         step_name: Name for this processing step
@@ -627,22 +630,25 @@ def tissue_mask_filter_by_overlap(
         if erosion_radius > 0:
             print(f"  with erosion radius {erosion_radius} (applied before upscaling)")
         
-        success = generate_segmentation_mask(
+        # Note: img_shape is (height, width) but generate_segmentation_mask expects (width, height)
+        success, tissue_mask = generate_segmentation_mask(
             geojson_path=str(tissue_geojson_path),
             output_dir=str(output_dir),
-            image_width=int(img_shape[0]),  # width is first dimension
-            image_height=int(img_shape[1]),
+            image_width=int(img_shape[1]),  # width is second dimension
+            image_height=int(img_shape[0]),  # height is first dimension
             inner_holes=True,
             downsample_factor=downsample_factor,
-            erosion_radius_before_upscaling=erosion_radius if erosion_radius > 0 else None
+            erosion_strategy="before_upscaling" if downsample_factor != 1.0 else "after_upscaling",
+            erosion_radius=erosion_radius if erosion_radius > 0 else None,
+            erosion_downsample_factor=erosion_downsample_factor,
+            erosion_method="cv2",
+            sample_name=base_name if data_paths is not None else None,
+            save_intermediate=False
         )
         
         if not success:
             print(f"Error generating tissue mask, returning original mask")
             return seg_mask
-        
-        # Load the generated mask
-        tissue_mask = np.load(tissue_mask_path)
         
         # Convert to binary (0 or 1)
         tissue_mask = (tissue_mask > 0).astype(np.uint8)
