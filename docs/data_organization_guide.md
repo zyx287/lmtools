@@ -1,346 +1,325 @@
-# Data Organization Guide for LM Tools
+# Data Organization Guide
 
-This guide describes the recommended file structure and naming conventions for using the DataPaths system in the immune cell processing pipeline.
+This guide describes the required directory structure and naming conventions for the LM Tools data organization workflow.
 
-## Directory Structure
+## Overview
 
-### Recommended Channel-Separated Structure
+The data organization process consists of 3 steps:
+1. **Step 1**: Organize raw images by channel for cellpose batch processing
+2. **Step 2**: Reorganize data by sample after segmentation 
+3. **Step 3**: Add tissue masks from QuPath to organized samples
+
+## Step 1: Organize by Channel
+
+### Purpose
+Prepare images for batch cellpose segmentation by grouping them by channel type.
+
+### Input Requirements
+- Raw microscopy images in a single directory
+- File naming pattern: `{sample_name}_{channel}.tif` or `{sample_name}_{channel}.tiff`
+- Supported channels: CY5, CY3, DAPI, CD11b (case-insensitive in filename)
+
+### Example Input Files
 ```
-experiment_folder/
-│
-├── raw_images/              # Original microscopy images organized by channel
-│   ├── CY5/
-│   │   ├── Slide 8 of 1_Region 001_CY5.tiff
-│   │   ├── Slide 8 of 1_Region 002_CY5.tiff
-│   │   └── ...
-│   ├── CY3/
-│   │   ├── Slide 8 of 1_Region 001_CY3.tiff
-│   │   ├── Slide 8 of 1_Region 002_CY3.tiff
-│   │   └── ...
-│   ├── DAPI/
-│   │   ├── Slide 8 of 1_Region 001_DAPI.tiff
-│   │   ├── Slide 8 of 1_Region 002_DAPI.tiff
-│   │   └── ...
-│   └── CD11b/
-│       ├── Slide 8 of 1_Region 001_CD11b.tiff
-│       ├── Slide 8 of 1_Region 002_CD11b.tiff
-│       └── ...
-│
-├── segmentations/           # Cellpose or other segmentation outputs by channel
-│   ├── CY5/
-│   │   ├── Slide 8 of 1_Region 001_CY5_cellpose_masks.npy
-│   │   └── ...
-│   ├── CY3/
-│   │   ├── Slide 8 of 1_Region 001_CY3_cellpose_masks.npy
-│   │   └── ...
-│   ├── DAPI/
-│   │   ├── Slide 8 of 1_Region 001_DAPI_cellpose_masks.npy
-│   │   └── ...
-│   └── QuPath/              # Optional QuPath masks
-│       ├── Slide 8 of 1_Region 001_qupath_mask.npy
-│       └── ...
-│
-└── processed/               # Auto-created by DataPaths
-    ├── Slide 8 of 1_Region 001_cy5_dapi_filtered.npy
-    ├── Slide 8 of 1_Region 001_final_immune_cells.npy
-    ├── Slide 8 of 1_Region 001_metadata.json
-    └── ...
+raw_images/
+├── Slide 8 of 1_Region 001_CY5.tiff
+├── Slide 8 of 1_Region 001_CY3.tiff  
+├── Slide 8 of 1_Region 001_DAPI.tiff
+├── Slide 8 of 1_Region 002_CY5.tiff
+├── Slide 8 of 1_Region 002_CY3.tiff
+├── Slide 8 of 1_Region 002_DAPI.tiff
+└── ...
 ```
 
-### Alternative Flat Structure (also supported)
+### Output Structure After Step 1
 ```
-experiment_folder/
-│
-├── raw_images/              # All images in one directory
-│   ├── Sample01_CY5.tif
-│   ├── Sample01_CY3.tif
-│   ├── Sample01_DAPI.tif
-│   ├── Sample01_CD11b.tif
-│   └── ...
-│
-├── segmentations/           # All segmentations in one directory
-│   ├── Sample01_CY5_cellpose_masks.npy
-│   ├── Sample01_CY3_cellpose_masks.npy
-│   ├── Sample01_DAPI_cellpose_masks.npy
-│   └── ...
-│
-└── processed/
-    └── ...
-```
-
-## Naming Conventions
-
-### Base Name Pattern
-Each sample should have a consistent base name. Common patterns include:
-- **Slide-based**: `Slide 8 of 1_Region 001` (for slide scanners)
-- **Simple**: `Sample01`, `Mouse1_Section2`
-- **Date-based**: `Exp20240115_S1`
-
-### Default File Suffixes
-
-#### Raw Image Files
-- **CY5 channel**: `{base_name}_CY5.tiff` or `{base_name}_CY5.tif`
-- **CY3 channel**: `{base_name}_CY3.tiff` or `{base_name}_CY3.tif`
-- **DAPI channel**: `{base_name}_DAPI.tiff` or `{base_name}_DAPI.tif`
-- **CD11b channel**: `{base_name}_CD11b.tiff` or `{base_name}_CD11b.tif`
-
-#### Segmentation Files
-- **CY5 segmentation**: `{base_name}_CY5_cellpose_masks.npy`
-- **CY3 segmentation**: `{base_name}_CY3_cellpose_masks.npy`
-- **DAPI segmentation**: `{base_name}_DAPI_cellpose_masks.npy`
-- **QuPath segmentation**: `{base_name}_qupath_mask.npy` or `qupath_mask.npy`
-
-### Alternative Naming Patterns (Auto-detected)
-The system will also try these patterns if the default isn't found:
-- `{base_name}_{CHANNEL}.tiff` / `{base_name}_{CHANNEL}.tif`
-- `{base_name}-{CHANNEL}.tiff` / `{base_name}-{CHANNEL}.tif`
-- `{CHANNEL}_{base_name}.tiff` / `{CHANNEL}_{base_name}.tif`
-
-Where `{CHANNEL}` is the uppercase channel name (CY5, CY3, DAPI, CD11B).
-
-## File Formats
-
-### Images
-- **Format**: TIFF (.tif or .tiff)
-- **Bit depth**: 8-bit, 16-bit, or 32-bit
-- **Dimensions**: 2D (XY) or 3D (XYZ) supported
-- **Multi-channel**: Split into separate files
-
-### Segmentations
-- **Format**: NumPy array (.npy)
-- **Type**: Label mask (0 = background, 1+ = object IDs)
-- **Dimensions**: Must match corresponding image
-
-### Metadata
-- **Format**: JSON (.json)
-- **Auto-generated**: Created by DataPaths.save_metadata()
-
-## Example Setup
-
-### Option 1: Channel-Separated Directories (Recommended)
-Organize files by channel:
-```
-my_experiment/
-├── raw_images/
+organized_output/
+├── channels_for_segmentation/
 │   ├── CY5/
 │   │   ├── Slide 8 of 1_Region 001_CY5.tiff
 │   │   └── Slide 8 of 1_Region 002_CY5.tiff
 │   ├── CY3/
 │   │   ├── Slide 8 of 1_Region 001_CY3.tiff
 │   │   └── Slide 8 of 1_Region 002_CY3.tiff
-│   ├── DAPI/
-│   │   ├── Slide 8 of 1_Region 001_DAPI.tiff
-│   │   └── Slide 8 of 1_Region 002_DAPI.tiff
-│   └── CD11b/
-│       ├── Slide 8 of 1_Region 001_CD11b.tiff
-│       └── Slide 8 of 1_Region 002_CD11b.tiff
-├── segmentations/
-│   ├── CY5/
-│   │   └── Slide 8 of 1_Region 001_CY5_cellpose_masks.npy
-│   ├── DAPI/
-│   │   └── Slide 8 of 1_Region 001_DAPI_cellpose_masks.npy
-│   └── QuPath/
-│       └── Slide 8 of 1_Region 001_qupath_mask.npy
-└── processed/  # Auto-created
+│   └── DAPI/
+│       ├── Slide 8 of 1_Region 001_DAPI.tiff
+│       └── Slide 8 of 1_Region 002_DAPI.tiff
+├── sample_list.csv
+└── run_cellpose_batch.sh
 ```
 
-### Option 2: Single Directory
-All files in one directory:
-```
-my_experiment/
-├── Sample01_CY5.tif
-├── Sample01_CY3.tif
-├── Sample01_DAPI.tif
-├── Sample01_CD11b.tif
-├── Sample01_CY5_cellpose_masks.npy
-├── Sample01_DAPI_cellpose_masks.npy
-├── Sample01_qupath_mask.npy
-└── processed/  # Auto-created
-```
-
-## Organizing Raw Data
-
-Use the provided bash script to organize your data:
-```bash
-./organize_data.sh -i /path/to/raw/images -o /path/to/organized/data
-```
-
-This will create the recommended channel-separated directory structure automatically.
-
-## Usage Examples
-
-### For Channel-Separated Directories (Recommended)
-
+### Usage
 ```python
-from lmtools.seg import create_data_paths
+from lmtools.io import organize_data
 
-# For organized data with channel subdirectories
-data_paths = create_data_paths(
-    base_dir="/path/to/my_experiment",
-    base_name="Slide 8 of 1_Region 001",
-    experiment_name="Immune Cell Study",
-    sample_id="Slide8_Region001",
-    # Specify channel subdirectories
-    channel_dirs={
-        'cy5': 'raw_images/CY5',
-        'cy3': 'raw_images/CY3',
-        'dapi': 'raw_images/DAPI',
-        'cd11b': 'raw_images/CD11b'
-    },
-    # Specify segmentation subdirectories
-    seg_dirs={
-        'cy5_seg': 'segmentations/CY5',
-        'cy3_seg': 'segmentations/CY3',
-        'dapi_seg': 'segmentations/DAPI',
-        'qupath_seg': 'segmentations/QuPath'
-    }
-)
-
-# Access your data
-print(f"CY5 image: {data_paths.cy5_img}")
-print(f"DAPI segmentation: {data_paths.dapi_seg}")
-```
-
-### For Single Directory
-
-```python
-# For flat directory structure (all files in one place)
-data_paths = create_data_paths(
-    base_dir="/path/to/my_experiment",
-    base_name="Sample01",
-    experiment_name="Immune Cell Study",
-    sample_id="Mouse1_Brain_S1"
+# Run step 1
+channel_df = organize_data(
+    source_dir='/path/to/raw/images',
+    output_dir='/path/to/organized/output', 
+    step=1
 )
 ```
 
-## Custom Channel Names
+## Step 2: Organize by Sample
 
-If your channels have different names, customize the suffixes:
+### Purpose
+After cellpose segmentation, reorganize data by sample for processing pipelines.
 
+### Requirements Before Step 2
+1. Completed Step 1
+2. Cellpose segmentation masks in channel directories
+3. Segmentation mask naming: `{sample_name}_{channel}_cellpose_masks.npy`
+
+### Expected Segmentation Files
+```
+organized_output/
+└── channels_for_segmentation/
+    ├── CY5/
+    │   ├── Slide 8 of 1_Region 001_CY5_cellpose_masks.npy
+    │   └── Slide 8 of 1_Region 002_CY5_cellpose_masks.npy
+    ├── CY3/
+    │   ├── Slide 8 of 1_Region 001_CY3_cellpose_masks.npy
+    │   └── Slide 8 of 1_Region 002_CY3_cellpose_masks.npy
+    └── DAPI/
+        ├── Slide 8 of 1_Region 001_DAPI_cellpose_masks.npy
+        └── Slide 8 of 1_Region 002_DAPI_cellpose_masks.npy
+```
+
+### Output Structure After Step 2
+```
+organized_output/
+└── samples/
+    ├── Slide 8 of 1_Region 001/
+    │   ├── raw_images/
+    │   │   ├── Slide 8 of 1_Region 001_CY5.tiff
+    │   │   ├── Slide 8 of 1_Region 001_CY3.tiff
+    │   │   └── Slide 8 of 1_Region 001_DAPI.tiff
+    │   ├── segmentations/
+    │   │   ├── Slide 8 of 1_Region 001_CY5_cellpose_masks.npy
+    │   │   ├── Slide 8 of 1_Region 001_CY3_cellpose_masks.npy
+    │   │   └── Slide 8 of 1_Region 001_DAPI_cellpose_masks.npy
+    │   ├── results/
+    │   └── sample_metadata.json
+    ├── Slide 8 of 1_Region 002/
+    │   └── ... (same structure)
+    └── sample_ids.txt
+```
+
+### Usage
 ```python
-data_paths = create_data_paths(
-    base_dir="/path/to/data",
-    base_name="Sample01",
-    experiment_name="My Experiment",
-    sample_id="S1",
-    channel_suffixes={
-        'cy5': '_CD45.tif',      # Instead of _CY5.tif
-        'cy3': '_CD68.tif',      # Instead of _CY3.tif
-        'dapi': '_Hoechst.tif',  # Instead of _DAPI.tif
-        'cd11b': '_CD11b.tif'    # Keep default
-    },
-    seg_suffixes={
-        'cy5_seg': '_CD45_segmentation.npy',
-        'dapi_seg': '_nuclei_mask.npy',
-        # ... etc
-    }
+# Run step 2 after cellpose segmentation
+sample_df = organize_data(
+    source_dir='/path/to/raw/images',
+    output_dir='/path/to/organized/output',
+    step=2
 )
 ```
 
-## Best Practices
+## Step 3: Add Tissue Masks
 
-1. **Consistent Naming**: Use the same base name for all files from one sample
-2. **No Spaces**: Avoid spaces in file names (use underscores or hyphens)
-3. **Descriptive Base Names**: Include relevant info (e.g., `Mouse01_Ctx_Section03`)
-4. **Channel Order**: Keep channel order consistent across experiments
-5. **Backup Raw Data**: Keep original images separate from processed data
+### Purpose
+Copy QuPath tissue masks to appropriate sample folders.
 
-## Batch Processing Structure
+### Requirements
+- QuPath GeoJSON files with tissue annotations
+- File naming must match sample names exactly
+- Expected format: `{sample_name}_DAPI.geojson` or `{sample_name}.geojson`
 
-For experiments with multiple samples:
-
+### Example QuPath Files
 ```
-experiment_2024/
-├── batch_metadata.json      # Overall experiment metadata
-├── Sample01/
-│   ├── Sample01_CY5.tif
-│   ├── Sample01_DAPI.tif
-│   ├── Sample01_CY5_cellpose_masks.npy
-│   └── processed/
-├── Sample02/
-│   ├── Sample02_CY5.tif
-│   ├── Sample02_DAPI.tif
-│   ├── Sample02_CY5_cellpose_masks.npy
-│   └── processed/
+qupath_masks/
+├── Slide 8 of 1_Region 001_DAPI.geojson
+├── Slide 8 of 1_Region 002_DAPI.geojson
 └── ...
 ```
 
-## Output Files (Auto-generated)
+### Output After Step 3
+```
+organized_output/samples/
+└── Slide 8 of 1_Region 001/
+    ├── raw_images/
+    ├── segmentations/
+    ├── results/
+    ├── tissue_masks/
+    │   └── Slide 8 of 1_Region 001_DAPI.geojson
+    └── sample_metadata.json
+```
 
-The DataPaths system will create:
+### Usage
+```python
+# Run step 3 to add tissue masks
+mask_df = organize_data(
+    source_dir='/path/to/raw/images',
+    output_dir='/path/to/organized/output',
+    step=3,
+    qupath_dir='/path/to/qupath/masks'
+)
+```
 
-1. **Processed masks**: `{base_name}_{description}.npy`
-   - Example: `Sample01_cy5_dapi_filtered.npy`
-   - Example: `Sample01_final_immune_cells.npy`
+## File Naming Rules
 
-2. **Metadata**: `{base_name}_metadata.json`
-   - Complete processing history
-   - Parameter values
-   - Input/output file paths
-   - Timestamps
+### Critical Naming Requirements
 
-3. **Directory**: `processed/`
-   - Created automatically
-   - Contains all outputs
+1. **Sample Name Extraction**
+   - The sample name is extracted by removing the channel suffix
+   - Example: `Slide 8 of 1_Region 001_CY5.tiff` → Sample name: `Slide 8 of 1_Region 001`
 
-## Metadata File Structure
+2. **Channel Identification**
+   - Channels are identified by suffix: `_CY5`, `_CY3`, `_DAPI`, `_CD11b`
+   - Case-insensitive matching (e.g., `_cy5`, `_Cy5`, `_CY5` all work)
+   - Must appear at the end of filename before extension
 
-The auto-generated metadata includes:
+3. **Segmentation Mask Naming**
+   - Must follow pattern: `{sample_name}_{channel}_cellpose_masks.npy`
+   - The sample name must match exactly between raw image and mask
+
+4. **Tissue Mask Naming**
+   - QuPath files must match sample name exactly
+   - Acceptable patterns:
+     - `{sample_name}_DAPI.geojson`
+     - `{sample_name}.geojson`
+
+### Valid File Name Examples
+```
+✓ Slide 8 of 1_Region 001_CY5.tiff
+✓ Mouse1_Brain_Section2_DAPI.tif
+✓ Exp20240115_S1_cy3.tiff
+✓ Sample_001_Cd11b.tif
+```
+
+### Invalid File Name Examples
+```
+✗ CY5_Slide 8 of 1_Region 001.tiff  (channel at beginning)
+✗ Slide8Region001CY5.tiff           (no underscore separator)
+✗ Slide 8 of 1_Region 001.CY5.tiff  (channel after extension)
+```
+
+## Data Structure Reference
+
+### DataOrganizer Attributes
+```python
+class DataOrganizer:
+    source_dir: Path           # Input directory with raw images
+    output_dir: Path          # Output directory for organized data
+    sample_info: List[Dict]   # Information about processed samples
+```
+
+### Sample Metadata Structure (sample_metadata.json)
 ```json
 {
-  "experiment_name": "Immune Cell Study",
-  "sample_id": "Mouse1_Brain_S1",
-  "acquisition_date": "2024-01-15",
-  "processing_date": "2024-01-20T14:30:00",
-  "channel_mappings": {
-    "cy5": "Sample01_CY5.tif",
-    "dapi": "Sample01_DAPI.tif"
-  },
-  "segmentation_sources": {
-    "cy5_seg": "/path/to/Sample01_CY5_cellpose_masks.npy"
-  },
-  "intensity_filter_sources": {
-    "cd11b_filter": "cd11b"
-  },
-  "processing_steps": [
-    {
-      "step_name": "cy5_dapi_overlap_filter",
-      "timestamp": "2024-01-20T14:30:15",
-      "parameters": {
-        "min_overlap_ratio": 0.5,
-        "removed_objects": 45,
-        "remaining_objects": 123
-      }
-    }
-  ]
+    "sample_id": "Slide 8 of 1_Region 001",
+    "raw_images": {
+        "CY5": "Slide 8 of 1_Region 001_CY5.tiff",
+        "CY3": "Slide 8 of 1_Region 001_CY3.tiff",
+        "DAPI": "Slide 8 of 1_Region 001_DAPI.tiff"
+    },
+    "segmentations": {
+        "CY5": "Slide 8 of 1_Region 001_CY5_cellpose_masks.npy",
+        "CY3": "Slide 8 of 1_Region 001_CY3_cellpose_masks.npy",
+        "DAPI": "Slide 8 of 1_Region 001_DAPI_cellpose_masks.npy"
+    },
+    "tissue_masks": {
+        "QuPath": "Slide 8 of 1_Region 001_DAPI.geojson"
+    },
+    "organization_date": "2024-01-20T14:30:00",
+    "source_directory": "/path/to/raw/images"
 }
 ```
 
-## Troubleshooting
+### Output DataFrames
 
-### File Not Found Errors
-1. Check file naming matches the pattern
-2. Verify files are in the correct directory
-3. Use `data_paths.get_all_paths_dict()` to see what paths are being searched
+**Step 1 DataFrame (channel_df)**
+| Column | Description |
+|--------|-------------|
+| filename | Original filename |
+| sample_id | Extracted sample name |
+| channel | Detected channel (CY5, CY3, DAPI) |
+| source_path | Original file path |
+| dest_path | Organized file path |
+| status | Copy status |
 
-### Custom Patterns
-If your files don't match standard patterns, explicitly set paths:
+**Step 2 DataFrame (sample_df)**  
+| Column | Description |
+|--------|-------------|
+| sample_id | Sample name |
+| num_channels | Number of channels found |
+| channels | List of channels |
+| num_masks | Number of segmentation masks |
+| masks | List of mask files |
+| sample_dir | Path to sample directory |
+| status | Organization status |
+
+**Step 3 DataFrame (mask_df)**
+| Column | Description |
+|--------|-------------|
+| sample_id | Sample name |
+| tissue_mask_file | Source mask filename |
+| source_path | Original mask path |
+| dest_path | Organized mask path |
+| status | Copy status |
+
+## Complete Workflow Example
+
 ```python
-# Override specific suffixes
-data_paths.channel_suffixes['cy5'] = '_mymarker.tif'
-data_paths.seg_suffixes['cy5_seg'] = '_mysegmentation.npy'
+from lmtools.io import organize_data
+
+# Step 1: Organize by channel
+print("Step 1: Organizing by channel...")
+channel_df = organize_data(
+    source_dir='/data/microscopy/raw_images',
+    output_dir='/data/microscopy/organized',
+    step=1
+)
+
+# Run cellpose segmentation here using the generated script
+# ./organized/run_cellpose_batch.sh
+
+# Step 2: Organize by sample after segmentation
+print("Step 2: Organizing by sample...")
+sample_df = organize_data(
+    source_dir='/data/microscopy/raw_images',
+    output_dir='/data/microscopy/organized',
+    step=2
+)
+
+# Step 3: Add tissue masks from QuPath
+print("Step 3: Adding tissue masks...")
+mask_df = organize_data(
+    source_dir='/data/microscopy/raw_images',
+    output_dir='/data/microscopy/organized',
+    step=3,
+    qupath_dir='/data/microscopy/qupath_masks'
+)
+
+print("Data organization complete!")
 ```
 
-### Missing Files
-The system will raise clear errors indicating which file pattern it couldn't find, making it easy to correct naming issues.
+## Using Organized Data in Pipelines
 
-## Next Steps
+After organization, use the data with processing pipelines:
 
-For a complete walkthrough of organizing and processing your data, see the [Data Processing Workflow Guide](data_processing_workflow_guide.md).
+```python
+from lmtools.io import create_data_paths_from_organized
 
-### Quick Reference
+# For each organized sample
+sample_dir = '/data/microscopy/organized/samples/Slide 8 of 1_Region 001'
 
-1. **Organize data**: `./organize_data.sh -i input_dir -o output_dir`
-2. **Create DataPaths**: Use `channel_dirs` and `seg_dirs` for organized data
-3. **Process data**: Load images/segmentations and run your analysis
-4. **Save results**: Use `data_paths.save_processed_mask()` and `data_paths.save_metadata()`
+data_paths = create_data_paths_from_organized(
+    organized_sample_dir=sample_dir,
+    experiment_name='My Experiment'
+)
+
+# Access files
+print(f"CY5 image: {data_paths.cy5_img}")
+print(f"CY5 mask: {data_paths.cy5_seg}")
+print(f"Tissue mask: {data_paths.get_tissue_mask_path()}")
+```
+
+## Important Notes
+
+1. **File Extensions**: Both `.tif` and `.tiff` are supported
+2. **Case Sensitivity**: Channel names in filenames are case-insensitive
+3. **Special Characters**: Sample names can contain spaces and special characters
+4. **Overwriting**: Step 2 will overwrite existing sample directories
+5. **Missing Files**: The organizer will continue processing even if some files are missing
+6. **Mask Copying**: Segmentation masks are only copied if they exist (no error if missing)
