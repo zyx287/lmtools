@@ -14,9 +14,9 @@ def process_all_tissue_mask_filter(
     organized_output_dir: str,
     mask_to_filter: str = 'cy3_cy5_overlap_filtered',  # or 'cy5_filtered_relabeled'
     experiment_name: str = 'Tissue Mask Filtering',
-    erosion_radius: int = 10,
-    erosion_downsample_factor: float = None,
-    erosion_method: str = 'cv2',
+    erosion_radius: int = 50,
+    erosion_downsample_factor: float = 1.0,
+    erosion_method: str = 'edt',
     min_overlap_ratio: float = 0.99,
     save_filtered_masks: bool = True
 ):
@@ -41,22 +41,23 @@ def process_all_tissue_mask_filter(
         Name for the experiment (used in metadata tracking)
         
     erosion_radius : int
-        Radius for tissue mask erosion in pixels. This helps to:
+        Radius for tissue mask erosion in pixels (default: 50). This helps to:
         - Remove cells at the tissue edge that might be artifacts
         - Focus on cells well within the tissue boundary
-        - Typical values: 5-20 pixels depending on resolution
-        - Higher values = more conservative (remove more edge cells)
+        - Default of 50 pixels provides good edge artifact removal
+        - Adjust based on your image resolution and needs
         
-    erosion_downsample_factor : float, optional
-        Downsample factor for erosion operation to speed up processing.
-        - None: Use same resolution as mask generation
-        - 0.25: Perform erosion at 25% resolution (4x faster)
-        - Useful for large images with large erosion radii
+    erosion_downsample_factor : float
+        Downsample factor for erosion operation (default: 1.0).
+        - 1.0: Full resolution erosion (most accurate, default)
+        - 0.25: Perform erosion at 25% resolution (16x faster)
+        - 0.1: Perform erosion at 10% resolution (100x faster)
+        - Lower values trade accuracy for speed
         
     erosion_method : str
-        Method for erosion operation:
-        - 'cv2': Traditional morphological erosion (most accurate)
-        - 'edt': Euclidean distance transform (faster for large radii)
+        Method for erosion operation (default: 'edt'):
+        - 'cv2': Traditional morphological erosion (accurate but slow for large radii)
+        - 'edt': Euclidean distance transform (default, fast and accurate)
         - 'gpu': GPU-accelerated EDT (fastest, requires CuPy)
         
     min_overlap_ratio : float
@@ -294,31 +295,40 @@ def process_all_tissue_mask_filter(
 
 # Usage examples
 if __name__ == "__main__":
-    # Example 1: Filter cy3_cy5_overlap_filtered masks (from cy3_dapi_cy5_filter_pipeline)
+    # Example 1: Default settings (recommended for most cases)
     df = process_all_tissue_mask_filter(
         organized_output_dir='/path/to/organized/output',
         mask_to_filter='cy3_cy5_overlap_filtered',
-        erosion_radius=10,
-        min_overlap_ratio=0.99
+        experiment_name='Tissue Mask Filtering',
+        erosion_radius=50,                    # Default: removes cells within 50 pixels of tissue edge
+        erosion_downsample_factor=1.0,        # Default: full resolution (most accurate)
+        erosion_method='edt',                 # Default: EDT method (fast and accurate)
+        min_overlap_ratio=0.99,               # Default: cells must be 99% within tissue
+        save_filtered_masks=True              # Default: save the filtered masks
     )
     
-    # Example 2: Filter with GPU acceleration for large erosion radius
+    # Example 2: Faster processing for large images with downsampling
     # df = process_all_tissue_mask_filter(
     #     organized_output_dir='/path/to/organized/output',
     #     mask_to_filter='cy5_filtered_relabeled',
-    #     erosion_radius=100,
-    #     erosion_method='gpu',  # Use GPU acceleration
-    #     min_overlap_ratio=0.99
+    #     experiment_name='Tissue Mask Filtering - Fast',
+    #     erosion_radius=100,                   # Larger erosion radius
+    #     erosion_downsample_factor=0.25,       # 16x faster erosion at 25% resolution
+    #     erosion_method='edt',                 # EDT method
+    #     min_overlap_ratio=0.99,               # Keep strict overlap requirement
+    #     save_filtered_masks=True              # Save results
     # )
     
-    # Example 3: Filter with erosion downsampling for performance
+    # Example 3: Maximum speed with GPU acceleration
     # df = process_all_tissue_mask_filter(
     #     organized_output_dir='/path/to/organized/output',
-    #     mask_to_filter='my_custom_filtered_mask',
-    #     erosion_radius=200,
-    #     erosion_downsample_factor=0.25,  # Erode at 25% resolution
-    #     erosion_method='edt',  # Use EDT method
-    #     min_overlap_ratio=0.95
+    #     mask_to_filter='cy3_filtered_relabeled',
+    #     experiment_name='Tissue Mask Filtering - GPU',
+    #     erosion_radius=200,                   # Very large erosion radius
+    #     erosion_downsample_factor=0.1,        # 100x faster at 10% resolution
+    #     erosion_method='gpu',                 # GPU acceleration (requires CUDA)
+    #     min_overlap_ratio=0.95,               # Slightly relaxed overlap requirement
+    #     save_filtered_masks=True              # Save results
     # )
 
 
@@ -341,32 +351,38 @@ Example workflow:
   df = process_all_tissue_mask_filter(
       organized_output_dir='/path/to/organized/output',
       mask_to_filter='cy3_cy5_overlap_filtered',  # from cy3_dapi_cy5 pipeline
-      erosion_radius=10,
-      min_overlap_ratio=0.99
+      experiment_name='Tissue Mask Filtering',
+      erosion_radius=50,                        # Remove cells within 50 pixels of edge
+      erosion_downsample_factor=1.0,            # Full resolution erosion
+      erosion_method='edt',                     # EDT method (fast)
+      min_overlap_ratio=0.99,                   # 99% overlap required
+      save_filtered_masks=True                  # Save the results
   )
 
 Erosion Method Performance Guide:
 ---------------------------------
-1. 'cv2' (default): Traditional morphological erosion
-   - Most accurate for small radii (<50 pixels)
-   - Can be slow for large radii
-   - Good for small images or when accuracy is critical
-
-2. 'edt': Euclidean Distance Transform
+1. 'edt' (default): Euclidean Distance Transform
    - 10-100x faster than cv2 for large radii
-   - Good balance of speed and accuracy
-   - Recommended for radii > 50 pixels
+   - Excellent balance of speed and accuracy
+   - Recommended for most use cases
+   - Default erosion radius of 50 pixels works very well with EDT
+
+2. 'cv2': Traditional morphological erosion
+   - Most accurate for very small radii (<20 pixels)
+   - Can be slow for large radii
+   - Use when pixel-perfect accuracy is critical
 
 3. 'gpu': GPU-accelerated EDT
    - Fastest option (requires CUDA GPU + CuPy)
    - 10-30x faster than CPU EDT
-   - Ideal for large images and radii
-   - Falls back to EDT if GPU unavailable
+   - Ideal for very large images or batch processing
+   - Automatically falls back to EDT if GPU unavailable
 
 Erosion Downsample Factor:
 -------------------------
-- None: Erosion at full tissue mask resolution
+- 1.0 (default): Erosion at full tissue mask resolution (most accurate)
 - 0.25: Erosion at 25% resolution (16x faster)
 - 0.1: Erosion at 10% resolution (100x faster)
 - Trade-off: Lower values = faster but less accurate boundaries
+- Recommendation: Use 1.0 for accuracy, 0.25 for balanced speed/accuracy
 '''

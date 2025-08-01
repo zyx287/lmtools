@@ -559,8 +559,8 @@ def tissue_mask_filter_by_overlap(
 ) -> np.ndarray:
     '''Filter segmentation mask by overlap with tissue mask from QuPath GeoJSON.
     
-    This function loads a QuPath tissue annotation, applies erosion, and filters
-    cells based on their overlap with the tissue region.
+    This function loads a QuPath tissue annotation, applies erosion using EDT method
+    (fast and accurate), and filters cells based on their overlap with the tissue region.
     
     Args:
         seg_mask: Segmentation mask to filter
@@ -638,10 +638,10 @@ def tissue_mask_filter_by_overlap(
             image_height=int(img_shape[0]),  # height is first dimension
             inner_holes=True,
             downsample_factor=downsample_factor,
-            erosion_strategy="before_upscaling" if erosion_downsample_factor != 1.0 else "after_upscaling",
+            erosion_strategy="before_upscaling" if erosion_downsample_factor is not None and erosion_downsample_factor != 1.0 else "after_upscaling",
             erosion_radius=erosion_radius if erosion_radius > 0 else None,
             erosion_downsample_factor=erosion_downsample_factor,
-            erosion_method="cv2",
+            erosion_method="edt",
             sample_name=base_name if data_paths is not None else None,
             save_intermediate=False
         )
