@@ -19,7 +19,7 @@ def generate_cell_density_heatmap(
     relabeled_mask_path: Union[str, Path, np.ndarray],
     bin_size: int = 100,
     output_path: Optional[Union[str, Path]] = None,
-    smooth: bool = True,
+    smooth: bool = False,
     sigma: float = 2,
     figsize: Tuple[int, int] = (10, 10),
     dpi: int = 300,
