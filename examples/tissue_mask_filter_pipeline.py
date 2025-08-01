@@ -84,6 +84,9 @@ def process_all_tissue_mask_filter(
         - has_tissue_mask: Whether tissue mask was found
         - erosion_radius: Erosion radius used
         - min_overlap_ratio: Overlap threshold used
+        - tissue_area_pixels: Area of the (eroded) tissue mask in pixels
+        - average_density_per_pixel: Average cell density (cells/pixel)
+        - average_density_per_100x100: Average cell density per 100x100 area
     
     Notes:
     ------
@@ -133,7 +136,10 @@ def process_all_tissue_mask_filter(
                     'initial_cells': 0,
                     'tissue_filtered_cells': 0,
                     'cells_removed_by_tissue': 0,
-                    'percent_retained': 0.0
+                    'percent_retained': 0.0,
+                    'tissue_area_pixels': 0,
+                    'average_density_per_pixel': 0.0,
+                    'average_density_per_100x100': 0.0
                 }
                 results.append(result)
                 continue
@@ -161,6 +167,37 @@ def process_all_tissue_mask_filter(
             if has_tissue_mask and initial_count > 0:
                 print(f"Applying tissue mask filter...")
                 
+                # Generate tissue mask with erosion using the same logic as tissue_mask_filter_by_overlap
+                from lmtools.seg.generate_mask import generate_segmentation_mask
+                
+                # Save the eroded tissue mask to the output directory
+                success, tissue_mask_eroded = generate_segmentation_mask(
+                    geojson_path=str(tissue_mask_path),
+                    output_dir=str(data_paths.output_dir),  # Save to results folder
+                    image_width=seg_mask.shape[1],
+                    image_height=seg_mask.shape[0],
+                    inner_holes=True,
+                    downsample_factor=1.0,  # Full resolution
+                    erosion_strategy="after_upscaling" if erosion_downsample_factor is None or erosion_downsample_factor == 1.0 else "before_upscaling",
+                    erosion_radius=erosion_radius if erosion_radius > 0 else None,
+                    erosion_downsample_factor=erosion_downsample_factor,
+                    erosion_method=erosion_method,
+                    sample_name=sample_name,  # Use sample name for consistent naming
+                    save_intermediate=False
+                )
+                
+                if not success:
+                    raise ValueError("Failed to generate tissue mask")
+                
+                # The mask is already saved by generate_segmentation_mask
+                if erosion_radius and erosion_radius > 0:
+                    print(f"Saved eroded tissue mask: {sample_name}_tissue_mask_eroded{erosion_radius}.npy")
+                else:
+                    print(f"Saved tissue mask: {sample_name}_tissue_mask.npy")
+                
+                # Calculate tissue area (number of pixels)
+                tissue_area_pixels = np.sum(tissue_mask_eroded > 0)
+                
                 filtered_mask = tissue_mask_filter_by_overlap(
                     seg_mask=seg_mask,
                     tissue_geojson_path=tissue_mask_path,
@@ -182,7 +219,12 @@ def process_all_tissue_mask_filter(
                 cells_removed = initial_count - filtered_count
                 percent_retained = (filtered_count / initial_count * 100) if initial_count > 0 else 0
                 
+                # Calculate average density (cells per pixel)
+                average_density = filtered_count / tissue_area_pixels if tissue_area_pixels > 0 else 0
+                
                 print(f"After tissue filtering: {filtered_count} cells ({percent_retained:.1f}% retained)")
+                print(f"Tissue area: {tissue_area_pixels:,} pixels")
+                print(f"Average density: {average_density:.6f} cells/pixel ({average_density * 10000:.2f} cells per 100x100 area)")
                 
                 # Save filtered mask
                 if save_filtered_masks:
@@ -203,7 +245,9 @@ def process_all_tissue_mask_filter(
                                 "initial_cells": initial_count,
                                 "filtered_cells": filtered_count,
                                 "cells_removed": cells_removed,
-                                "percent_retained": percent_retained
+                                "percent_retained": percent_retained,
+                                "tissue_area_pixels": tissue_area_pixels,
+                                "average_density": average_density
                             },
                             input_data=[mask_to_filter, "tissue_mask"],
                             notes=f"Applied tissue mask filter to {mask_to_filter}"
@@ -215,6 +259,8 @@ def process_all_tissue_mask_filter(
                 filtered_count = initial_count
                 cells_removed = 0
                 percent_retained = 100.0 if initial_count > 0 else 0
+                tissue_area_pixels = 0
+                average_density = 0.0
                 
                 if not has_tissue_mask:
                     print("No tissue filtering applied (no tissue mask)")
@@ -240,6 +286,9 @@ def process_all_tissue_mask_filter(
                 'tissue_filtered_cells': filtered_count,
                 'cells_removed_by_tissue': cells_removed,
                 'percent_retained': percent_retained,
+                'tissue_area_pixels': tissue_area_pixels,
+                'average_density_per_pixel': average_density,
+                'average_density_per_100x100': average_density * 10000 if tissue_area_pixels > 0 else 0,
                 'metadata_path': str(metadata_path)
             }
             
@@ -253,7 +302,10 @@ def process_all_tissue_mask_filter(
                 'initial_cells': 0,
                 'tissue_filtered_cells': 0,
                 'cells_removed_by_tissue': 0,
-                'percent_retained': 0.0
+                'percent_retained': 0.0,
+                'tissue_area_pixels': 0,
+                'average_density_per_pixel': 0.0,
+                'average_density_per_100x100': 0.0
             }
         
         results.append(result)
@@ -282,13 +334,22 @@ def process_all_tissue_mask_filter(
         total_initial = tissue_filtered['initial_cells'].sum()
         total_filtered = tissue_filtered['tissue_filtered_cells'].sum()
         total_removed = tissue_filtered['cells_removed_by_tissue'].sum()
+        total_tissue_area = tissue_filtered['tissue_area_pixels'].sum()
         
         print(f"\nFor samples with tissue masks:")
         print(f"  Total initial cells: {total_initial:,}")
         print(f"  Total after tissue filtering: {total_filtered:,}")
         print(f"  Total cells removed: {total_removed:,}")
+        print(f"  Total tissue area: {total_tissue_area:,} pixels")
         if total_initial > 0:
             print(f"  Overall retention rate: {(total_filtered/total_initial*100):.1f}%")
+        
+        # Average density statistics
+        avg_density_per_sample = tissue_filtered['average_density_per_100x100'].mean()
+        std_density_per_sample = tissue_filtered['average_density_per_100x100'].std()
+        print(f"\nAverage density across samples:")
+        print(f"  Mean: {avg_density_per_sample:.2f} ± {std_density_per_sample:.2f} cells per 100x100 area")
+        print(f"  Range: {tissue_filtered['average_density_per_100x100'].min():.2f} - {tissue_filtered['average_density_per_100x100'].max():.2f}")
     
     return df
 
