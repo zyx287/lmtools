@@ -638,7 +638,7 @@ def tissue_mask_filter_by_overlap(
             image_height=int(img_shape[0]),  # height is first dimension
             inner_holes=True,
             downsample_factor=downsample_factor,
-            erosion_strategy="before_upscaling" if downsample_factor != 1.0 else "after_upscaling",
+            erosion_strategy="before_upscaling" if erosion_downsample_factor != 1.0 else "after_upscaling",
             erosion_radius=erosion_radius if erosion_radius > 0 else None,
             erosion_downsample_factor=erosion_downsample_factor,
             erosion_method="cv2",
