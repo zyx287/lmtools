@@ -16,10 +16,10 @@ def process_all_density_maps(
     masks_to_process: list = ['cy3_cy5_overlap_filtered_tissue_filtered', 'cy5_filtered_relabeled'],
     experiment_name: str = 'Cell Density Analysis',
     bin_size: int = 100,
-    smooth: bool = True,
-    sigma: float = 2,
-    generate_distribution_plots: bool = True,
-    save_density_arrays: bool = True
+    smooth: bool = False,
+    sigma: float = 2.0,
+    generate_distribution_plots: bool = False,
+    save_density_arrays: bool = False
 ):
     """
     Process all samples in organized output directory to generate density heatmaps.
@@ -116,7 +116,7 @@ def process_all_density_maps(
             }
             
             for mask_name in masks_to_process:
-                mask_path = data_paths.output_dir / f"{mask_name}.npy"
+                mask_path = data_paths.output_dir / f"{sample_name}_{mask_name}.npy"
                 
                 if not mask_path.exists():
                     print(f"  {mask_name}: Not found, skipping")
@@ -138,7 +138,7 @@ def process_all_density_maps(
                 
                 # Generate density heatmap if tissue mask available
                 if tissue_mask_npy and tissue_mask_npy.exists():
-                    density_output_path = density_output_dir / f"{mask_name}_density_heatmap.png"
+                    density_output_path = density_output_dir / f"{sample_name}_{mask_name}_density_heatmap.png"
                     
                     try:
                         density_array = generate_cell_density_heatmap(
@@ -157,7 +157,7 @@ def process_all_density_maps(
                         
                         # Save density array if requested
                         if save_density_arrays:
-                            density_array_path = density_output_dir / f"{mask_name}_density_array.npy"
+                            density_array_path = density_output_dir / f"{sample_name}_{mask_name}_density_array.npy"
                             np.save(density_array_path, density_array)
                             sample_result[f'{mask_name}_density_array'] = str(density_array_path)
                         
@@ -172,7 +172,7 @@ def process_all_density_maps(
                 
                 # Generate distribution plot
                 if generate_distribution_plots:
-                    distribution_output_path = distribution_output_dir / f"{mask_name}_distribution.png"
+                    distribution_output_path = distribution_output_dir / f"{sample_name}_{mask_name}_distribution.png"
                     
                     try:
                         # Use tissue mask for overlay if available
