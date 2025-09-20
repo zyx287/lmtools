@@ -553,6 +553,7 @@ def tissue_mask_filter_by_overlap(
     downsample_factor: float = 1.0,
     erosion_radius: int = 0,
     erosion_downsample_factor: Optional[float] = None,
+    erosion_method:str = "edt",
     min_overlap_ratio: float = 0.99,
     data_paths: Optional[DataPaths] = None,
     step_name: str = "tissue_mask_filter"
@@ -641,7 +642,7 @@ def tissue_mask_filter_by_overlap(
             erosion_strategy="before_upscaling" if erosion_downsample_factor is not None and erosion_downsample_factor != 1.0 else "after_upscaling",
             erosion_radius=erosion_radius if erosion_radius > 0 else None,
             erosion_downsample_factor=erosion_downsample_factor,
-            erosion_method="edt",
+            erosion_method=erosion_method,
             sample_name=base_name if data_paths is not None else None,
             save_intermediate=False
         )
