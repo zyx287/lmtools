@@ -15,6 +15,11 @@ from .intensity_threshold import (
     compute_gmm_component
 )
 
+from .denoise import (
+    clahe_denoise,
+    adaptive_clahe_denoise
+)
+
 __all__ = [
     # Morphology functions
     'erode_mask_2D_with_ball',
@@ -23,5 +28,8 @@ __all__ = [
     'generate_binary_donut_2D',
     # Intensity threshold functions
     'compute_otsu_threshold',
-    'compute_gmm_component'
+    'compute_gmm_component',
+    # Denoise functions
+    'clahe_denoise',
+    'adaptive_clahe_denoise'
 ]
