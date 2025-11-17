@@ -1,4 +1,4 @@
-from .generate_mask import generate_segmentation_mask
+from .generate_mask import generate_segmentation_mask, geojson2npy
 from .maskExtract import maskExtract
 from .analyze_segmentation import analyze_segmentation, summarize_segmentation, get_bounding_boxes
 from .cellpose_segmentation import run_pipeline, check_gpu, load_config, process_directory
@@ -23,9 +23,14 @@ from .immune_cell import (
     reassign_labels,
     tissue_mask_filter_by_overlap
 )
+from .visualize import (
+    generate_cell_density_heatmap,
+    generate_cell_distribution_plot
+)
 
 __all__ = [
     'generate_segmentation_mask',
+    'geojson2npy',
     'maskExtract',
     'analyze_segmentation',
     'summarize_segmentation',
@@ -55,4 +60,6 @@ __all__ = [
     'relabel_sequential_labels',
     'reassign_labels',
     'tissue_mask_filter_by_overlap',
+    'generate_cell_density_heatmap',
+    'generate_cell_distribution_plot',
 ]

@@ -82,9 +82,13 @@ def robust_move(src: Union[str, Path], dst: Union[str, Path]) -> None:
 class DataOrganizer:
     '''Handles the organization of microscopy data for processing.
     
-    This class provides a two-step workflow:
+    This class provides a three-step workflow:
     1. organize_by_channel(): Organize images by channel for cellpose batch processing
     2. organize_by_sample(): Reorganize data by sample ID after segmentation
+    3. organize_tissue_masks(): Add QuPath tissue masks to organized samples
+    
+    Methods:
+        info(): Display comprehensive status information about the organization
     
     Attributes:
         source_dir (Path): Source directory containing raw images
@@ -583,6 +587,175 @@ echo "python -c 'from lmtools.io import DataOrganizer; organizer = DataOrganizer
             logger.warning("No tissue masks were organized")
         
         return mask_df
+    
+    def info(self) -> None:
+        '''Display comprehensive information about the data organization status.
+        
+        Shows:
+        - Source and output directories
+        - Organization status for each step
+        - Directory structure
+        - Sample summary
+        - File counts and types
+        '''
+        print("\n" + "="*70)
+        print("DATA ORGANIZER INFORMATION")
+        print("="*70)
+        
+        # Basic info
+        print(f"\nSource Directory: {self.source_dir}")
+        print(f"Output Directory: {self.output_dir}")
+        
+        # Check step 1 status
+        print("\n" + "-"*50)
+        print("STEP 1 STATUS (Organize by Channel)")
+        print("-"*50)
+        
+        channel_dir = self.output_dir / "channels_for_segmentation"
+        sample_list_csv = self.output_dir / "sample_list.csv"
+        
+        if channel_dir.exists():
+            print("✓ Step 1 completed")
+            
+            # Count files in each channel
+            for channel in ['CY5', 'CY3', 'DAPI']:
+                ch_path = channel_dir / channel
+                if ch_path.exists():
+                    tiff_files = list(ch_path.glob("*.tif*"))
+                    mask_files = list(ch_path.glob("*_masks.npy"))
+                    print(f"  {channel}: {len(tiff_files)} images, {len(mask_files)} masks")
+            
+            # Load and summarize sample list
+            if sample_list_csv.exists():
+                df = pd.read_csv(sample_list_csv)
+                print(f"\nTotal samples found: {df['sample_id'].nunique()}")
+                print(f"Total images: {len(df)}")
+                
+                # Show first 5 sample names
+                sample_ids = df['sample_id'].unique()[:5]
+                print(f"\nFirst {len(sample_ids)} samples:")
+                for sid in sample_ids:
+                    print(f"  - {sid}")
+                if len(df['sample_id'].unique()) > 5:
+                    print(f"  ... and {len(df['sample_id'].unique()) - 5} more")
+        else:
+            print("✗ Step 1 not completed")
+            print("  Run: organizer.organize_by_channel()")
+        
+        # Check step 2 status
+        print("\n" + "-"*50)
+        print("STEP 2 STATUS (Organize by Sample)")
+        print("-"*50)
+        
+        samples_dir = self.output_dir / "samples"
+        
+        if samples_dir.exists() and any(samples_dir.iterdir()):
+            print("✓ Step 2 completed")
+            
+            sample_dirs = [d for d in samples_dir.iterdir() if d.is_dir()]
+            print(f"\nOrganized samples: {len(sample_dirs)}")
+            
+            # Analyze sample structure
+            total_images = 0
+            total_masks = 0
+            total_tissue_masks = 0
+            
+            for sample_dir in sample_dirs[:3]:  # Check first 3 samples
+                raw_imgs = sample_dir / "raw_images"
+                segs = sample_dir / "segmentations"
+                tissue = sample_dir / "tissue_masks"
+                
+                if raw_imgs.exists():
+                    img_count = len(list(raw_imgs.glob("*.tif*")))
+                    total_images += img_count
+                
+                if segs.exists():
+                    mask_count = len(list(segs.glob("*.npy")))
+                    total_masks += mask_count
+                
+                if tissue.exists():
+                    tissue_count = len(list(tissue.glob("*.geojson")))
+                    total_tissue_masks += tissue_count
+            
+            if sample_dirs:
+                avg_images = total_images / min(3, len(sample_dirs))
+                avg_masks = total_masks / min(3, len(sample_dirs))
+                
+                print(f"\nAverage per sample:")
+                print(f"  Images: {avg_images:.1f}")
+                print(f"  Segmentation masks: {avg_masks:.1f}")
+                
+                # Show sample directory structure
+                print(f"\nSample directory structure:")
+                first_sample = sample_dirs[0]
+                for item in sorted(first_sample.iterdir()):
+                    if item.is_dir():
+                        print(f"  {item.name}/")
+                        # Show first few files
+                        files = list(item.iterdir())[:2]
+                        for f in files:
+                            print(f"    - {f.name}")
+                        if len(list(item.iterdir())) > 2:
+                            print(f"    ... ({len(list(item.iterdir()))} total files)")
+        else:
+            print("✗ Step 2 not completed")
+            print("  Run: organizer.organize_by_sample()")
+        
+        # Check step 3 status
+        print("\n" + "-"*50)
+        print("STEP 3 STATUS (Tissue Masks)")
+        print("-"*50)
+        
+        if samples_dir.exists():
+            samples_with_tissue = 0
+            for sample_dir in samples_dir.iterdir():
+                if sample_dir.is_dir():
+                    tissue_dir = sample_dir / "tissue_masks"
+                    if tissue_dir.exists() and any(tissue_dir.glob("*.geojson")):
+                        samples_with_tissue += 1
+            
+            if samples_with_tissue > 0:
+                print("✓ Step 3 completed")
+                print(f"  Samples with tissue masks: {samples_with_tissue}")
+            else:
+                print("✗ Step 3 not completed")
+                print("  Run: organizer.organize_tissue_masks(qupath_dir)")
+        
+        # Source directory analysis
+        print("\n" + "-"*50)
+        print("SOURCE DIRECTORY ANALYSIS")
+        print("-"*50)
+        
+        if self.source_dir.exists():
+            all_files = list(self.source_dir.glob("*"))
+            tiff_files = [f for f in all_files if f.suffix.lower() in ['.tif', '.tiff']]
+            
+            print(f"Total files: {len(all_files)}")
+            print(f"TIFF images: {len(tiff_files)}")
+            
+            # Check for expected channels
+            channels_found = {'CY5': 0, 'CY3': 0, 'DAPI': 0, 'CD11b': 0}
+            unmatched_files = []
+            
+            for f in tiff_files:
+                sample_id, channel = self.extract_sample_info(f.name)
+                if channel:
+                    channels_found[channel] = channels_found.get(channel, 0) + 1
+                else:
+                    unmatched_files.append(f.name)
+            
+            print(f"\nChannels found:")
+            for ch, count in channels_found.items():
+                if count > 0:
+                    print(f"  {ch}: {count} images")
+            
+            if unmatched_files:
+                print(f"\nUnmatched files: {len(unmatched_files)}")
+                print("  First 3:")
+                for f in unmatched_files[:3]:
+                    print(f"    - {f}")
+        
+        print("\n" + "="*70)
 
 
 def organize_data(source_dir: Union[str, Path], 
