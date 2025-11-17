@@ -9,7 +9,12 @@ description:
 import numpy as np
 from typing import Union, Tuple, Optional
 
-import cv2
+try:
+    import cv2
+    HAS_OPENCV = True
+except ImportError:
+    cv2 = None  # type: ignore[assignment]
+    HAS_OPENCV = False
 from skimage import exposure
 from skimage.util import img_as_ubyte, img_as_float
 from skimage.filters import gaussian
