@@ -2,7 +2,7 @@
 LMTools - Tools and scripts for processing and visualizing light microscopy data.
 '''
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Import main functionality for easier access
 from lmtools.io import (
